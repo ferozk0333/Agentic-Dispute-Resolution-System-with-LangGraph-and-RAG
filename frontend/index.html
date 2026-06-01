@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DisputeAI — Multi-Agent Compliance Pipeline</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">◈</span>
+      <span class="brand-name">DisputeAI</span>
+      <span class="brand-sub">Multi-Agent Compliance Pipeline</span>
+    </div>
+    <nav class="step-bar" id="stepBar">
+      <div class="step" data-step="1" data-state="active">
+        <div class="step-circle"><span class="step-num">1</span><span class="step-check">✓</span></div>
+        <span class="step-label">Input</span>
+      </div>
+      <div class="step-connector" data-after="1"></div>
+      <div class="step" data-step="2" data-state="pending">
+        <div class="step-circle"><span class="step-num">2</span><span class="step-check">✓</span></div>
+        <span class="step-label">Triage</span>
+      </div>
+      <div class="step-connector" data-after="2"></div>
+      <div class="step" data-step="3" data-state="pending">
+        <div class="step-circle"><span class="step-num">3</span><span class="step-check">✓</span></div>
+        <span class="step-label">Investigate</span>
+      </div>
+      <div class="step-connector" data-after="3"></div>
+      <div class="step" data-step="4" data-state="pending">
+        <div class="step-circle"><span class="step-num">4</span><span class="step-check">✓</span></div>
+        <span class="step-label">Audit</span>
+      </div>
+      <div class="step-connector" data-after="4"></div>
+      <div class="step" data-step="5" data-state="pending">
+        <div class="step-circle"><span class="step-num">5</span><span class="step-check">✓</span></div>
+        <span class="step-label">Results</span>
+      </div>
+    </nav>
+  </header>
+
+  <main class="main-content">
+
+    <!-- ── Panel 1: Input ──────────────────────────────────────────── -->
+    <section id="panel-1" class="panel panel-active">
+      <div class="panel-inner">
+        <div class="panel-header">
+          <h2>Dispute Input</h2>
+          <p class="panel-sub">Submit a dispute to run it through the three-agent AI pipeline</p>
+        </div>
+
+        <div class="sample-row">
+          <span class="sample-label">Load sample:</span>
+          <button class="btn-sample" id="loadApprove">Clean dispute (approve flow)</button>
+          <button class="btn-sample" id="loadViolation">High-value (policy violation)</button>
+        </div>
+
+        <form id="disputeForm" class="dispute-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="f_txn_id">Transaction ID</label>
+              <input id="f_txn_id" type="text" class="mono" placeholder="TXN-2024-0318-8821" required>
+            </div>
+            <div class="form-group">
+              <label for="f_amount">Amount (USD)</label>
+              <input id="f_amount" type="number" step="0.01" min="0.01" placeholder="1240.00" required>
+            </div>
+            <div class="form-group">
+              <label for="f_merchant">Merchant</label>
+              <input id="f_merchant" type="text" placeholder="ElectroMart Inc." required>
+            </div>
+            <div class="form-group">
+              <label for="f_reason">Reason code</label>
+              <select id="f_reason" required>
+                <option value="10.4">10.4 — Unauthorized</option>
+                <option value="13.1">13.1 — Not received</option>
+                <option value="12.5">12.5 — Incorrect amount</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label for="f_statement">Customer statement</label>
+            <textarea id="f_statement" rows="4" placeholder="Describe the disputed transaction…" required></textarea>
+          </div>
+          <button type="submit" class="btn-primary" id="submitBtn">
+            ▶&ensp;Run dispute pipeline
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ── Panel 2: Triage ─────────────────────────────────────────── -->
+    <section id="panel-2" class="panel">
+      <div class="panel-inner">
+        <div class="agent-header" data-agent="triage">
+          <div class="agent-title">
+            <span class="agent-dot" data-agent="triage"></span>
+            <h2>Agent 1 — Triage &amp; Router</h2>
+          </div>
+          <span class="model-badge">gpt-4o-mini</span>
+        </div>
+
+        <div class="loading-row" id="triageLoading">
+          <span class="spinner"></span> Running triage agent…
+        </div>
+
+        <div id="triageContent" class="hidden">
+          <div class="section-label">Extracted entities</div>
+          <div class="entities-row" id="triageEntities"></div>
+
+          <div class="section-label">PII-masked statement</div>
+          <div class="code-block" id="maskedStatement"></div>
+
+          <div class="metrics-row" id="triageMetrics"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Panel 3: Investigator ───────────────────────────────────── -->
+    <section id="panel-3" class="panel">
+      <div class="panel-inner">
+        <div class="agent-header" data-agent="investigator">
+          <div class="agent-title">
+            <span class="agent-dot" data-agent="investigator"></span>
+            <h2>Agent 2 — Investigator</h2>
+          </div>
+          <span class="model-badge">gpt-4o</span>
+        </div>
+
+        <div class="loading-row" id="invLoading">
+          <span class="spinner"></span> Running investigator agent…
+        </div>
+
+        <div id="invContent" class="hidden">
+          <div class="section-label">Tool execution log</div>
+          <div class="tool-log" id="toolLog"></div>
+
+          <div class="section-label">Retrieved Visa rule clause</div>
+          <div class="rag-block" id="ragBlock"></div>
+
+          <div class="section-label">Fraud signals detected</div>
+          <ul class="signal-list" id="signalList"></ul>
+
+          <div class="verdict-row">
+            <div class="verdict-col">
+              <div class="section-label">Recommendation</div>
+              <div class="verdict-badge" id="recBadge"></div>
+            </div>
+            <div class="confidence-col">
+              <div class="section-label">Confidence</div>
+              <div class="confidence-track">
+                <div class="confidence-fill" id="confidenceFill"></div>
+              </div>
+              <span class="confidence-pct" id="confidencePct"></span>
+            </div>
+          </div>
+
+          <div class="metrics-row" id="invMetrics"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Panel 4: Auditor ────────────────────────────────────────── -->
+    <section id="panel-4" class="panel">
+      <div class="panel-inner">
+        <div class="agent-header" data-agent="auditor">
+          <div class="agent-title">
+            <span class="agent-dot" data-agent="auditor"></span>
+            <h2>Agent 3 — Auditor <span class="independent-tag">(independent)</span></h2>
+          </div>
+          <span class="model-badge">gpt-4o-mini</span>
+        </div>
+
+        <div class="loading-row" id="auditorLoading">
+          <span class="spinner"></span> Running auditor agent…
+        </div>
+
+        <div id="auditorContent" class="hidden">
+          <div id="violationBanner" class="violation-banner hidden"></div>
+
+          <div class="section-label">Policy rules</div>
+          <table class="rules-table">
+            <thead><tr><th>Rule</th><th>Status</th><th>Detail</th></tr></thead>
+            <tbody id="rulesBody"></tbody>
+          </table>
+
+          <div class="verdict-row top-gap">
+            <div class="verdict-col">
+              <div class="section-label">Verdict</div>
+              <div class="verdict-badge large" id="auditorVerdict"></div>
+            </div>
+          </div>
+
+          <div class="audit-toggle-row">
+            <button class="btn-link" id="auditToggle">▶ View audit log entry</button>
+            <pre class="code-block audit-pre hidden" id="auditPre"></pre>
+          </div>
+
+          <div class="metrics-row" id="auditorMetrics"></div>
+
+          <div class="violation-actions hidden" id="violationActions">
+            <button class="btn-outline" id="reviewBtn">Review manually</button>
+            <button class="btn-primary" id="resetFromViolation">↺ Run another dispute</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Panel 5: Results ────────────────────────────────────────── -->
+    <section id="panel-5" class="panel">
+      <div class="panel-inner">
+        <div class="results-header">
+          <h2>Pipeline complete</h2>
+          <div class="verdict-badge xlarge" id="finalVerdict"></div>
+        </div>
+
+        <div class="section-label">Pipeline summary</div>
+        <div class="totals-grid" id="totalsGrid"></div>
+
+        <div class="section-label">Per-agent breakdown</div>
+        <table class="breakdown-table" id="breakdownTable">
+          <thead>
+            <tr>
+              <th>Agent</th><th>Model</th><th>Latency</th>
+              <th>Tokens in</th><th>Tokens out</th><th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+
+        <div class="eval-row" id="evalRow"></div>
+
+        <div class="results-actions">
+          <button class="btn-primary" id="resetBtn">↺ Run another dispute</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="errorBanner" class="error-banner hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

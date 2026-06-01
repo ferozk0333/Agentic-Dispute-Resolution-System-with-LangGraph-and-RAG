@@ -133,3 +133,16 @@ async def resolve_dispute(dispute: DisputeInput):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/eval-results")
+async def eval_results():
+    from fastapi import HTTPException
+    path = "./data/eval_results.json"
+    if not os.path.exists(path):
+        raise HTTPException(
+            status_code=404,
+            detail="Eval results not found. Run: python3 -m backend.eval.run_eval",
+        )
+    with open(path) as f:
+        return json.load(f)
