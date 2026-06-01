@@ -69,6 +69,38 @@ def _mmr(
     return selected
 
 
+def compute_rag_precision(query: str, chunks: list[dict]) -> float:
+    """
+    LLM judge (gpt-4o-mini) scores each retrieved chunk as relevant (1) or not (0).
+    Returns the fraction that are relevant — the objective RAG precision for this query.
+    Only called in demo/live mode, never during batch eval.
+    """
+    if not chunks:
+        return 0.0
+    _, client = _get_collection()
+    scores = []
+    for chunk in chunks:
+        snippet = chunk.get("text", "")[:500]
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Is the following Visa rulebook text relevant to this dispute query?\n"
+                    f"Query: \"{query}\"\n\nText:\n{snippet}\n\n"
+                    "Reply with only 1 (relevant) or 0 (not relevant)."
+                ),
+            }],
+            max_tokens=1,
+            temperature=0,
+        )
+        try:
+            scores.append(float(resp.choices[0].message.content.strip()))
+        except (ValueError, AttributeError):
+            scores.append(0.0)
+    return round(sum(scores) / len(scores), 3)
+
+
 def search_compliance_docs(query: str, top_k: int = 3) -> list[dict]:
     collection, client = _get_collection()
 

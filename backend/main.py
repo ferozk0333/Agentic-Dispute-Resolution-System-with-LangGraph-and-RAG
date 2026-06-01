@@ -54,8 +54,13 @@ async def _stream_pipeline(dispute: DisputeInput) -> AsyncGenerator[str, None]:
 
     def _run():
         try:
+            # Accumulate state across steps so the auditor event can reference
+            # triage/investigator metrics for pipeline_totals.
+            accumulated: dict = {}
+
             for step in graph.stream(initial):
                 for agent_name, updates in step.items():
+                    accumulated.update(updates)
                     payload: dict = {"agent": agent_name}
 
                     if agent_name == "triage" and updates.get("triage_output"):
@@ -71,6 +76,26 @@ async def _stream_pipeline(dispute: DisputeInput) -> AsyncGenerator[str, None]:
                         payload["metrics"]     = _serialise(updates["auditor_metrics"])
                         payload["halted"]      = updates.get("halted", False)
                         payload["halt_reason"] = updates.get("halt_reason")
+
+                        t_m = accumulated.get("triage_metrics")
+                        i_m = accumulated.get("investigator_metrics")
+                        a_m = updates["auditor_metrics"]
+                        if t_m and i_m and a_m:
+                            payload["pipeline_totals"] = {
+                                "total_latency_ms": round(
+                                    t_m.latency_ms + i_m.latency_ms + a_m.latency_ms, 1
+                                ),
+                                "total_tokens_in":  t_m.tokens_in  + i_m.tokens_in  + a_m.tokens_in,
+                                "total_tokens_out": t_m.tokens_out + i_m.tokens_out + a_m.tokens_out,
+                                "total_tokens": (
+                                    t_m.tokens_in + t_m.tokens_out
+                                    + i_m.tokens_in + i_m.tokens_out
+                                    + a_m.tokens_in + a_m.tokens_out
+                                ),
+                                "total_cost_usd": round(
+                                    t_m.cost_usd + i_m.cost_usd + a_m.cost_usd, 6
+                                ),
+                            }
 
                     loop.call_soon_threadsafe(queue.put_nowait, payload)
 

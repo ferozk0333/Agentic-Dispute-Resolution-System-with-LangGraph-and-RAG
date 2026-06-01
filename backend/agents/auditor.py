@@ -305,8 +305,8 @@ def run_auditor(
     auditor_metrics = AgentMetrics(
         model=MODEL,
         latency_ms=round(latency_ms, 1),
-        prompt_tokens=response.usage.prompt_tokens,
-        completion_tokens=response.usage.completion_tokens,
+        tokens_in=response.usage.prompt_tokens,
+        tokens_out=response.usage.completion_tokens,
         cost_usd=round(_track_cost(response.usage.prompt_tokens, response.usage.completion_tokens), 6),
     )
 

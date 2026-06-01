@@ -19,7 +19,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from backend.agents.triage import AgentMetrics, TriageOutput
-from backend.tools.rag_tool import search_compliance_docs
+from backend.tools.rag_tool import compute_rag_precision, search_compliance_docs
 from backend.tools.risk_tool import check_merchant_risk
 from backend.tools.sql_tool import query_transactions
 from backend.tools.velocity_tool import get_velocity_history
@@ -179,6 +179,10 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
     total_completion = 0
     t0 = time.perf_counter()
 
+    # Track the last RAG call so we can compute objective precision after the loop
+    last_rag_query:  Optional[str]       = None
+    last_rag_chunks: Optional[list[dict]] = None
+
     while True:
         response = client.chat.completions.create(
             model=MODEL,
@@ -198,7 +202,13 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
             messages.append(msg)
             # Dispatch each tool call and append results
             for tc in msg.tool_calls:
-                result = _dispatch(tc.function.name, json.loads(tc.function.arguments))
+                name = tc.function.name
+                args = json.loads(tc.function.arguments)
+                if name == "search_compliance_docs":
+                    last_rag_query = args.get("query", "")
+                result = _dispatch(name, args)
+                if name == "search_compliance_docs":
+                    last_rag_chunks = result if isinstance(result, list) else None
                 messages.append({
                     "role":         "tool",
                     "tool_call_id": tc.id,
@@ -215,11 +225,18 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
                     raw = raw[4:]
                 raw = raw.rsplit("```", 1)[0].strip()
             output = InvestigatorOutput.model_validate(json.loads(raw))
+
+            # Replace self-reported rag_precision with objective LLM judge score
+            if last_rag_query and last_rag_chunks:
+                output = output.model_copy(
+                    update={"rag_precision": compute_rag_precision(last_rag_query, last_rag_chunks)}
+                )
+
             metrics = AgentMetrics(
                 model=MODEL,
                 latency_ms=round(latency_ms, 1),
-                prompt_tokens=total_prompt,
-                completion_tokens=total_completion,
+                tokens_in=total_prompt,
+                tokens_out=total_completion,
                 cost_usd=round(_track_cost(total_prompt, total_completion), 6),
             )
             return output, metrics

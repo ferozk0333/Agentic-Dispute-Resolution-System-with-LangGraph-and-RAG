@@ -53,8 +53,8 @@ class TriageOutput(BaseModel):
 class AgentMetrics(BaseModel):
     model: str
     latency_ms: float
-    prompt_tokens: int
-    completion_tokens: int
+    tokens_in: int
+    tokens_out: int
     cost_usd: float
 
 
@@ -126,8 +126,8 @@ def run_triage(dispute: DisputeInput) -> tuple[TriageOutput, AgentMetrics]:
     metrics = AgentMetrics(
         model=MODEL,
         latency_ms=round(latency_ms, 1),
-        prompt_tokens=response.usage.prompt_tokens,
-        completion_tokens=response.usage.completion_tokens,
+        tokens_in=response.usage.prompt_tokens,
+        tokens_out=response.usage.completion_tokens,
         cost_usd=round(track_cost(response.usage), 6),
     )
 
