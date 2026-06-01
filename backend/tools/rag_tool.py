@@ -72,8 +72,12 @@ def _mmr(
 def compute_rag_precision(query: str, chunks: list[dict]) -> float:
     """
     LLM judge (gpt-4o-mini) scores each retrieved chunk as relevant (1) or not (0).
-    Returns the fraction that are relevant — the objective RAG precision for this query.
-    Only called in demo/live mode, never during batch eval.
+    Returns max(scores): 1.0 if ANY chunk is relevant, 0.0 if none are.
+
+    max() is the correct aggregation here — the compliance use case succeeds when
+    the retrieval surfaces at least one applicable rule clause; averaging over MMR-
+    diversified chunks would penalise correct retrieval whenever adjacent clauses
+    are also returned.
     """
     if not chunks:
         return 0.0
@@ -98,7 +102,7 @@ def compute_rag_precision(query: str, chunks: list[dict]) -> float:
             scores.append(float(resp.choices[0].message.content.strip()))
         except (ValueError, AttributeError):
             scores.append(0.0)
-    return round(sum(scores) / len(scores), 3)
+    return round(max(scores), 3)
 
 
 def search_compliance_docs(query: str, top_k: int = 3) -> list[dict]:

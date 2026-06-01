@@ -2,8 +2,7 @@
 
 const API = 'http://localhost:8000';
 
-// ── Sample disputes ───────────────────────────────────────────────────────────
-
+// ── Samples ───────────────────────────────────────────────────────────────────
 const SAMPLES = {
   approve: {
     transaction_id: 'TXN-2024-0318-8821',
@@ -11,7 +10,7 @@ const SAMPLES = {
     merchant: 'ElectroMart Inc.',
     reason_code: '10.4',
     customer_statement:
-      'I did not authorize this charge. My card was in my wallet the entire time and I have never shopped at this merchant.',
+      'I did not authorize this $1,240 charge. My card was in my wallet the entire time and I have never shopped at this merchant before.',
   },
   violation: {
     transaction_id: 'TXN-2024-0316-9934',
@@ -19,302 +18,417 @@ const SAMPLES = {
     merchant: 'LuxuryGoods Direct',
     reason_code: '10.4',
     customer_statement:
-      'I did not authorize a $7,800 purchase from LuxuryGoods Direct shipped to a UAE address. This is fraudulent.',
+      'I did not authorize a $7,800 purchase from LuxuryGoods Direct shipped to a UAE address. This is clearly fraudulent activity on my account.',
   },
 };
 
-// ── Number formatting ─────────────────────────────────────────────────────────
-
+// ── Formatting ────────────────────────────────────────────────────────────────
 const fmt = {
-  ms:     (v) => `${Math.round(v)}ms`,
-  tokens: (v) => Number(v).toLocaleString(),
-  cost:   (v) => (v < 0.001 ? '< $0.001' : `$${v.toFixed(4)}`),
-  pct:    (v) => `${Math.round(v * 100)}%`,
-  score:  (v) => parseFloat(v).toFixed(2),
-  f1:     (v) => parseFloat(v).toFixed(2),
+  ms:     v => `${Math.round(v)}ms`,
+  tokens: v => Number(v).toLocaleString(),
+  cost:   v => v < 0.001 ? '< $0.001' : `$${v.toFixed(4)}`,
+  pct:    v => `${Math.round(v * 100)}%`,
+  score:  v => parseFloat(v).toFixed(2),
+  f1:     v => parseFloat(v).toFixed(2),
 };
 
-// ── Pipeline state ────────────────────────────────────────────────────────────
+// ── Tool definitions for the investigator animation ───────────────────────────
+const TOOL_DEFS = [
+  { id: 'sql',        icon: 'DB',  iconClass: 'db',    name: 'query_transactions',    label: 'Transaction DB lookup' },
+  { id: 'velocity',   icon: 'V',   iconClass: 'speed', name: 'get_velocity_history',   label: 'Card velocity check (24h)' },
+  { id: 'risk',       icon: 'MR',  iconClass: 'risk',  name: 'check_merchant_risk',    label: 'Merchant risk profile' },
+  { id: 'classifier', icon: 'DT',  iconClass: 'doc',   name: 'run_fraud_classifier',   label: 'Decision Tree fraud classifier' },
+  { id: 'rag',        icon: 'RAG', iconClass: 'doc',   name: 'search_compliance_docs', label: 'Visa rulebook retrieval' },
+];
 
-const STATE = {
-  triage: null,
-  investigator: null,
-  auditor: null,
-};
+// ── State ─────────────────────────────────────────────────────────────────────
+const STATE = { triage: null, investigator: null, auditor: null };
+let invAnimDone = Promise.resolve(); // resolved when investigator animation finishes
 
-// ── Step bar ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const el   = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function setStepState(stepNum, state) {
-  // state: 'pending' | 'active' | 'complete'
-  document.querySelector(`.step[data-step="${stepNum}"]`).dataset.state = state;
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function advanceStep(completedStep) {
-  setStepState(completedStep, 'complete');
-  if (completedStep < 5) setStepState(completedStep + 1, 'active');
-}
-
-// ── Panel switching ───────────────────────────────────────────────────────────
-
-function showPanel(n) {
-  document.querySelectorAll('.panel').forEach((p) => p.classList.remove('panel-active'));
-  const panel = document.getElementById(`panel-${n}`);
-  panel.classList.add('panel-active');
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// ── DOM helpers ───────────────────────────────────────────────────────────────
-
-function el(id) { return document.getElementById(id); }
-
-function metricCard(label, value, sub) {
-  return `<div class="metric-card">
-    <div class="metric-label">${label}</div>
-    <div class="metric-value">${value}</div>
-    ${sub ? `<div class="metric-sub">${sub}</div>` : ''}
+function metricTile(label, value, sub) {
+  return `<div class="metric-tile">
+    <div class="metric-tile-label">${label}</div>
+    <div class="metric-tile-value">${value}</div>
+    ${sub ? `<div class="metric-tile-sub">${sub}</div>` : ''}
   </div>`;
 }
 
-function verdictClass(verdict) {
-  return `verdict-${verdict.toLowerCase().replace(/ /g, '_')}`;
+function verdictClass(v) {
+  return 'v-' + (v || '').toLowerCase().replace(/ /g, '_');
+}
+function verdictLabel(v) {
+  return { approve: '✓ Approve', reject: '✗ Reject', escalate: 'Escalate',
+           policy_violation: '⚠ Policy Violation' }[v] || v;
 }
 
-function verdictLabel(verdict) {
-  const map = {
-    approve:          '✓ Approve',
-    reject:           '✗ Reject',
-    escalate:         '⇡ Escalate',
-    policy_violation: '⚠ Policy Violation',
-  };
-  return map[verdict] || verdict;
+// ── Field validation ──────────────────────────────────────────────────────────
+function setFieldError(inputId, errId, msg) {
+  const input = el(inputId);
+  const errEl = el(errId);
+  if (msg) {
+    input.classList.add('invalid');
+    if (errEl) errEl.textContent = msg;
+  } else {
+    input.classList.remove('invalid');
+    if (errEl) errEl.textContent = '';
+  }
+  return !msg;
+}
+
+function validateForm() {
+  const data = readForm();
+  let ok = true;
+
+  ok = setFieldError('f_txn', 'err_txn',
+    !data.transaction_id ? 'Transaction ID is required' : null) && ok;
+
+  ok = setFieldError('f_amt', 'err_amt',
+    isNaN(data.amount) || data.amount <= 0 ? 'Enter a positive amount' :
+    data.amount > 1_000_000 ? 'Amount exceeds $1,000,000 limit' : null) && ok;
+
+  ok = setFieldError('f_merch', 'err_merch',
+    !data.merchant ? 'Merchant name is required' : null) && ok;
+
+  ok = setFieldError('f_stmt', 'err_stmt',
+    !data.customer_statement ? 'Statement is required' :
+    data.customer_statement.length < 20 ? 'Please provide at least 20 characters' : null) && ok;
+
+  return ok;
+}
+
+// ── Step bar ──────────────────────────────────────────────────────────────────
+function setStep(n, state) {
+  document.querySelector(`.step-item[data-step="${n}"]`).dataset.state = state;
+}
+function completeStep(n) {
+  setStep(n, 'complete');
+  if (n < 5) setStep(n + 1, 'active');
+}
+
+// ── Panel display ─────────────────────────────────────────────────────────────
+function showPanel(n) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('panel-active'));
+  el(`panel-${n}`).classList.add('panel-active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ── Panel 2: Triage ───────────────────────────────────────────────────────────
-
 function populateTriage(event) {
   STATE.triage = event;
-  const out  = event.output;
-  const m    = event.metrics;
-  const ents = out.entities;
+  const { output: o, metrics: m } = event;
 
-  // Entities pills
+  // Entity pills
   const pills = [
-    { label: 'txn', value: out.transaction_id },
-    { label: 'amount', value: `$${Number(out.amount).toLocaleString()}` },
-    { label: 'merchant', value: out.merchant },
-    { label: 'reason', value: out.reason_code },
-    { label: 'category', value: ents.dispute_category },
-    { label: 'urgency', value: ents.urgency.replace(/_/g, ' ') },
-    ents.transaction_date ? { label: 'date', value: ents.transaction_date } : null,
+    { k: 'txn',      v: o.transaction_id },
+    { k: 'amount',   v: `$${Number(o.amount).toLocaleString()}` },
+    { k: 'merchant', v: o.merchant },
+    { k: 'reason',   v: o.reason_code },
+    { k: 'category', v: o.entities.dispute_category },
+    { k: 'urgency',  v: o.entities.urgency.replace(/_/g, ' ') },
+    o.entities.transaction_date ? { k: 'date', v: o.entities.transaction_date } : null,
   ].filter(Boolean);
 
-  el('triageEntities').innerHTML = pills
-    .map(p => `<span class="entity-pill urgency-${ents.urgency}">
-      <span class="pill-label">${p.label}</span>
-      <span class="pill-value">${p.label === 'urgency' ? p.value : p.value}</span>
-    </span>`)
-    .join('');
-
-  // Masked statement — highlight PII tokens in amber
-  const highlighted = out.masked_statement.replace(
-    /\[(NAME|LOCATION|CONTACT|PII)\]/g,
-    '<mark class="pii-mask">[$1]</mark>'
-  );
-  el('maskedStatement').innerHTML = highlighted;
-
-  // Metrics
-  el('triageMetrics').innerHTML = [
-    metricCard('Latency',      fmt.ms(m.latency_ms)),
-    metricCard('Tokens in/out', `${fmt.tokens(m.tokens_in)} / ${fmt.tokens(m.tokens_out)}`),
-    metricCard('Cost',         fmt.cost(m.cost_usd)),
-    metricCard('Model',        m.model),
-  ].join('');
-
-  el('triageLoading').classList.add('hidden');
-  el('triageContent').classList.remove('hidden');
-}
-
-// ── Panel 3: Investigator ─────────────────────────────────────────────────────
-
-function populateInvestigator(event) {
-  STATE.investigator = event;
-  const out = event.output;
-  const m   = event.metrics;
-  const tri = STATE.triage ? STATE.triage.output : {};
-
-  // Tool log — 4 rows, staggered via CSS animation-delay
-  const tools = buildToolRows(tri, out);
-  el('toolLog').innerHTML = tools.map(t =>
-    `<div class="tool-row">
-      <span class="tool-pulse"></span>
-      <span class="tool-name">${t.name}</span>
-      <span class="tool-args">${t.args}</span>
-      <span class="tool-badge ${t.badgeClass}">${t.badge}</span>
-    </div>`
+  el('triagePills').innerHTML = pills.map(p =>
+    `<span class="pill urgency-${o.entities.urgency}">
+       <span class="pill-key">${p.k}</span>
+       <span class="pill-val">${esc(p.v)}</span>
+     </span>`
   ).join('');
 
-  // RAG block
-  const ragText = out.rag_source_clause || 'NOT FOUND';
-  const ragMeta = event.output.rag_precision !== undefined
-    ? `<span>precision: ${fmt.score(out.rag_precision)}</span>`
-    : '';
-  el('ragBlock').innerHTML =
-    `${escHtml(ragText)}<div class="rag-meta">${ragMeta}</div>`;
+  // Masked statement — highlight PII tokens
+  el('maskedStmt').innerHTML = o.masked_statement.replace(
+    /\[(NAME|LOCATION|CONTACT|PII)\]/g,
+    '<span class="pii-mask">[$1]</span>'
+  );
 
-  // Fraud signals
-  const signals = out.fraud_signals || [];
+  el('triageMetrics').innerHTML = [
+    metricTile('Latency',       fmt.ms(m.latency_ms)),
+    metricTile('Tokens in',     fmt.tokens(m.tokens_in)),
+    metricTile('Tokens out',    fmt.tokens(m.tokens_out)),
+    metricTile('Cost',          fmt.cost(m.cost_usd)),
+  ].join('');
+
+  el('triageStatus').innerHTML = '<span style="color:var(--green)">✓ Complete</span>';
+  el('triageStatus').className = 'agent-status done';
+  el('triageBody').classList.remove('hidden');
+}
+
+// ── Classifier section renderer ───────────────────────────────────────────────
+function renderClassifier(clf) {
+  if (!clf) return;
+
+  const prob = clf.fraud_probability ?? 0;
+  const pred = clf.prediction ?? 'unknown';
+
+  // Animated probability bar (defer to next frame so transition fires)
+  const bar = el('probBar');
+  bar.style.width = '0%';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { bar.style.width = `${Math.round(prob * 100)}%`; });
+  });
+
+  el('probMeta').textContent =
+    `${(prob * 100).toFixed(1)}% · confidence: ${clf.confidence ?? '—'} · ${clf.model_version ?? 'dt_v1'}`;
+
+  const predEl = el('classifierPred');
+  predEl.textContent = pred === 'fraud' ? 'FRAUD' : 'LEGITIMATE';
+  predEl.className   = `classifier-pred ${pred === 'fraud' ? 'fraud' : 'legitimate'}`;
+
+  // Decision path
+  const pathEl = el('decisionPath');
+  pathEl.innerHTML = (clf.decision_path || []).map(step => {
+    const isLeaf = step === 'FRAUD' || step === 'LEGITIMATE';
+    if (isLeaf) {
+      const cls = step === 'FRAUD' ? 'path-leaf-fraud' : 'path-leaf-legit';
+      return `<div class="${cls}">→ ${step}</div>`;
+    }
+    return `<div>${esc(step)}</div>`;
+  }).join('');
+
+  // Feature importance bars — normalise so max bar = 100%
+  const features = clf.top_features || [];
+  const maxImp   = Math.max(...features.map(f => f.importance), 0.01);
+  el('featureList').innerHTML = features.map(f => {
+    const barPct = Math.round((f.importance / maxImp) * 100);
+    return `<div class="feat-bar-row">
+      <div class="feat-name" title="${esc(f.feature)}">${esc(f.feature)}</div>
+      <div class="feat-bar-track"><div class="feat-bar-fill" style="width:${barPct}%"></div></div>
+      <div class="feat-value">${parseFloat(f.importance).toFixed(2)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Panel 3: Investigator — animated tool log ─────────────────────────────────
+async function populateInvestigator(event) {
+  STATE.investigator = event;
+  const { output: o, metrics: m } = event;
+  const tri = STATE.triage?.output || {};
+
+  // Build result strings for each tool from the investigator output
+  const hasVelocity  = (o.fraud_signals || []).some(s => /transaction|velocity|hour/i.test(s));
+  const ragNotFound  = (o.rag_source_clause || '').startsWith('NOT FOUND');
+  const ragLabel     = ragNotFound ? 'Not found' : (o.rag_source_clause || '').split(':')[0].slice(0, 28);
+  const clf          = o.classifier_output || null;
+  const clfProb      = clf ? clf.fraud_probability : null;
+  const clfPred      = clf ? clf.prediction : null;
+
+  const toolResults = [
+    {
+      status:  'ok',
+      result:  `Transaction ${tri.transaction_id || '…'} · $${Number(tri.amount || 0).toLocaleString()}`,
+    },
+    {
+      status:  hasVelocity ? 'warn' : 'ok',
+      result:  hasVelocity
+        ? (o.fraud_signals || []).find(s => /transaction|velocity/i.test(s)) || 'Elevated velocity'
+        : 'Velocity within normal range',
+    },
+    {
+      status:  'ok',
+      result:  `${esc(tri.merchant || '…')}: risk profiled`,
+    },
+    {
+      status:  clfPred === 'fraud' ? 'warn' : 'ok',
+      result:  clf
+        ? `p(fraud)=${clfProb?.toFixed(2)} · ${clfPred}`
+        : 'Classifier not available',
+    },
+    {
+      status:  ragNotFound ? 'error' : 'ok',
+      result:  ragNotFound ? 'Rule not found — will escalate' : ragLabel,
+    },
+  ];
+
+  const timeline = el('toolTimeline');
+  timeline.innerHTML = '';
+
+  // Animate rows one by one
+  let resolveAnim;
+  invAnimDone = new Promise(r => { resolveAnim = r; });
+
+  for (let i = 0; i < TOOL_DEFS.length; i++) {
+    const def = TOOL_DEFS[i];
+    const res = toolResults[i];
+
+    // Step A: row appears in "running" state
+    const row = document.createElement('div');
+    row.className = 'tool-row';
+    row.style.animationDelay = '0s';
+    row.innerHTML = `
+      <div class="tool-row-left">
+        <div class="tool-icon ${def.iconClass}">${def.icon}</div>
+        <div class="tool-text">
+          <div class="tool-name">${def.name}()</div>
+          <div class="tool-args">${esc(def.label)}</div>
+          <div class="tool-result" id="tool-result-${i}"></div>
+        </div>
+      </div>
+      <div class="tool-row-right">
+        <span class="status-chip running" id="tool-chip-${i}">
+          <span class="tool-spinner"></span> Running
+        </span>
+      </div>`;
+    timeline.appendChild(row);
+
+    await sleep(700);   // simulate execution time
+
+    // Step B: update to done state with result
+    el(`tool-chip-${i}`).outerHTML =
+      `<span class="status-chip ${res.status}" id="tool-chip-${i}">
+         ${res.status === 'ok' ? '✓ Done' : res.status === 'warn' ? '⚠ Warning' : '✗ Not found'}
+       </span>`;
+    const resultEl = el(`tool-result-${i}`);
+    if (resultEl) resultEl.textContent = res.result;
+
+    await sleep(250);
+  }
+
+  resolveAnim();
+
+  // After animation: render classifier section
+  renderClassifier(clf);
+
+  // After animation: show RAG, signals, verdict, metrics
+  // RAG block
+  const ragText = o.rag_source_clause || 'NOT FOUND';
+  el('ragCard').innerHTML =
+    `${esc(ragText)}<div class="rag-meta"><span>section: ${esc(o.rag_source_clause?.split(':')[0] || '—')}</span><span>precision: ${fmt.score(o.rag_precision ?? 0)}</span></div>`;
+
+  // Signals
+  const signals = o.fraud_signals || [];
   el('signalList').innerHTML = signals.length
-    ? signals.map(s => `<li>${escHtml(s)}</li>`).join('')
+    ? signals.map(s => `<li>${esc(s)}</li>`).join('')
     : '<li>No specific signals detected</li>';
 
   // Recommendation badge
-  const rec = out.recommendation;
-  el('recBadge').className = `verdict-badge ${verdictClass(rec)}`;
-  el('recBadge').textContent = verdictLabel(rec);
+  el('recBadge').className = `verdict-badge ${verdictClass(o.recommendation)}`;
+  el('recBadge').textContent = verdictLabel(o.recommendation);
 
   // Confidence bar
-  const conf = out.confidence || 0;
+  const conf = o.confidence ?? 0;
   const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.70 ? 'conf-medium' : 'conf-low';
-  el('confidenceFill').style.width = fmt.pct(conf);
-  el('confidenceFill').className = `confidence-fill ${confClass}`;
-  el('confidencePct').textContent = fmt.pct(conf);
+  el('confFill').style.width = fmt.pct(conf);
+  el('confFill').className = `conf-fill ${confClass}`;
+  el('confPct').textContent = fmt.pct(conf);
 
   // Metrics
   el('invMetrics').innerHTML = [
-    metricCard('Latency',      fmt.ms(m.latency_ms)),
-    metricCard('Tokens in/out', `${fmt.tokens(m.tokens_in)} / ${fmt.tokens(m.tokens_out)}`),
-    metricCard('Cost',         fmt.cost(m.cost_usd)),
-    metricCard('RAG precision', fmt.score(out.rag_precision ?? 0)),
+    metricTile('Latency',       fmt.ms(m.latency_ms)),
+    metricTile('Tokens in',     fmt.tokens(m.tokens_in)),
+    metricTile('Tokens out',    fmt.tokens(m.tokens_out)),
+    metricTile('RAG precision', fmt.score(o.rag_precision ?? 0)),
   ].join('');
 
-  el('invLoading').classList.add('hidden');
-  el('invContent').classList.remove('hidden');
-}
-
-function buildToolRows(tri, inv) {
-  const txnId   = tri.transaction_id || '…';
-  const merchant = tri.merchant || '…';
-  const signals = inv.fraud_signals || [];
-  const rag     = inv.rag_source_clause || '';
-
-  const hasVelocity = signals.some(s => /transaction|velocity|hour/i.test(s));
-  const ragNotFound = rag.startsWith('NOT FOUND');
-
-  return [
-    {
-      name: 'query_transactions',
-      args: `("${txnId}")`,
-      badge: 'fetched',
-      badgeClass: 'badge-ok',
-    },
-    {
-      name: 'get_velocity_history',
-      args: '(card, 24h)',
-      badge: hasVelocity ? 'velocity spike' : 'checked',
-      badgeClass: hasVelocity ? 'badge-warn' : 'badge-ok',
-    },
-    {
-      name: 'check_merchant_risk',
-      args: `("${merchant.slice(0, 20)}")`,
-      badge: 'risk assessed',
-      badgeClass: 'badge-ok',
-    },
-    {
-      name: 'search_compliance_docs',
-      args: '(dispute condition)',
-      badge: ragNotFound ? 'not found' : (rag.split(':')[0] || 'retrieved').slice(0, 24),
-      badgeClass: ragNotFound ? 'badge-err' : 'badge-ok',
-    },
-  ];
+  el('invStatus').innerHTML = '<span style="color:var(--green)">✓ Complete</span>';
+  el('invStatus').className = 'agent-status done';
+  el('invBodyExtra').classList.remove('hidden');
 }
 
 // ── Panel 4: Auditor ──────────────────────────────────────────────────────────
+async function populateAuditor(event) {
+  // Wait for investigator animation to finish before rendering auditor
+  await invAnimDone;
 
-function populateAuditor(event) {
   STATE.auditor = event;
-  const out        = event.output;
-  const m          = event.metrics;
-  const violations = out.violations || [];
-  const isViolation = out.verdict === 'policy_violation';
+  const { output: o, metrics: m } = event;
+  const violations = o.violations || [];
+  const isViol = o.verdict === 'policy_violation';
+
+  // Reasoning box
+  const reasoning = o.reasoning || '';
+  if (reasoning) {
+    el('reasoningBox').textContent = reasoning;
+    el('reasoningBox').classList.remove('hidden');
+  }
 
   // Violation banner
-  if (isViolation && violations.length) {
-    const banner = el('violationBanner');
-    banner.innerHTML =
-      `<strong>⚠ Pipeline halted — policy violation detected</strong>
-       <ul>${violations.map(v => `<li>${escHtml(v.replace(/_/g, ' '))}</li>`).join('')}</ul>`;
-    banner.classList.remove('hidden');
+  if (isViol && violations.length) {
+    const b = el('violationBanner');
+    b.innerHTML = `<div class="alert-banner-title">⚠ Pipeline halted — policy violation detected</div>
+      <ul>${violations.map(v => `<li>${esc(v.replace(/_/g, ' '))}</li>`).join('')}</ul>`;
+    b.classList.remove('hidden');
   }
 
-  // Rules table
-  el('rulesBody').innerHTML = (out.rules_checked || []).map(r => {
-    const pass = r.passed;
-    return `<tr class="${pass ? '' : 'row-fail'}">
-      <td class="rule-name">${escHtml(r.rule)}</td>
-      <td><span class="rule-status ${pass ? 'pass' : 'fail'}">${pass ? '✓ Pass' : '✗ Fail'}</span></td>
-      <td class="rule-detail">${escHtml(r.detail)}</td>
-    </tr>`;
-  }).join('');
+  // Rules list
+  el('rulesList').innerHTML = (o.rules_checked || []).map(r =>
+    `<div class="rule-row ${r.passed ? '' : 'fail'}">
+       <div class="rule-body">
+         <div class="rule-name-text">${esc(r.rule)}</div>
+         <div class="rule-detail-text">${esc(r.detail)}</div>
+       </div>
+       <span class="rule-status-tag ${r.passed ? 'pass' : 'fail'}">${r.passed ? 'Pass' : 'Fail'}</span>
+     </div>`
+  ).join('');
 
   // Verdict
-  el('auditorVerdict').className = `verdict-badge large ${verdictClass(out.verdict)}`;
-  el('auditorVerdict').textContent = verdictLabel(out.verdict);
+  el('auditVerdict').className = `verdict-badge large ${verdictClass(o.verdict)}`;
+  el('auditVerdict').textContent = verdictLabel(o.verdict);
 
-  // Audit log JSON (collapsed by default)
-  el('auditPre').textContent = JSON.stringify(out, null, 2);
+  // Audit log
+  el('auditPre').textContent = JSON.stringify(o, null, 2);
 
   // Metrics
-  const violationCount = violations.length;
   el('auditorMetrics').innerHTML = [
-    metricCard('Latency',      fmt.ms(m.latency_ms)),
-    metricCard('Tokens in/out', `${fmt.tokens(m.tokens_in)} / ${fmt.tokens(m.tokens_out)}`),
-    metricCard('Cost',         fmt.cost(m.cost_usd)),
-    metricCard('Violations',   violationCount, violationCount ? 'policy halted' : 'all clear'),
+    metricTile('Latency',     fmt.ms(m.latency_ms)),
+    metricTile('Tokens in',   fmt.tokens(m.tokens_in)),
+    metricTile('Tokens out',  fmt.tokens(m.tokens_out)),
+    metricTile('Violations',  violations.length, violations.length ? 'policy halt' : 'all clear'),
   ].join('');
 
-  el('auditorLoading').classList.add('hidden');
-  el('auditorContent').classList.remove('hidden');
+  el('auditorStatus').innerHTML = '<span style="color:var(--green)">✓ Complete</span>';
+  el('auditorStatus').className = 'agent-status done';
+  el('auditorBody').classList.remove('hidden');
 
-  // Show "Review / Reset" buttons for policy violations
-  if (isViolation) {
-    el('violationActions').classList.remove('hidden');
-  }
+  if (isViol) el('violationActions').classList.remove('hidden');
 
-  // Populate panel 5 data now so it's ready if we advance
+  // Pre-populate results panel
   populateResults(event);
+
+  // Auto-advance to results for non-violation verdicts
+  if (!isViol) {
+    await sleep(1000);
+    completeStep(4);
+    showPanel(5);
+  }
 }
 
 // ── Panel 5: Results ──────────────────────────────────────────────────────────
+function populateResults(audEvent) {
+  setStep(5, 'complete');   // makes step 5 clickable in the stepper
+  const verdict = audEvent.output.verdict;
+  const totals  = audEvent.pipeline_totals || {};
 
-function populateResults(auditorEvent) {
-  const verdict = auditorEvent.output.verdict;
-  const totals  = auditorEvent.pipeline_totals || {};
-
-  // Final verdict badge
   el('finalVerdict').className = `verdict-badge xlarge ${verdictClass(verdict)}`;
   el('finalVerdict').textContent = verdictLabel(verdict);
 
-  // Totals grid
-  el('totalsGrid').innerHTML = [
-    metricCard('Total latency',   fmt.ms(totals.total_latency_ms  ?? 0)),
-    metricCard('Total tokens',    fmt.tokens(totals.total_tokens  ?? 0)),
-    metricCard('Total cost',      fmt.cost(totals.total_cost_usd  ?? 0)),
-    metricCard('Violations',      (auditorEvent.output.violations || []).length,
-      (auditorEvent.output.violations || []).length ? 'policy halt' : 'all clear'),
+  el('summaryGrid').innerHTML = [
+    metricTile('Total latency', fmt.ms(totals.total_latency_ms ?? 0)),
+    metricTile('Total tokens',  fmt.tokens(totals.total_tokens ?? 0)),
+    metricTile('Total cost',    fmt.cost(totals.total_cost_usd ?? 0)),
+    metricTile('Violations',    (audEvent.output.violations || []).length,
+      (audEvent.output.violations || []).length ? 'policy halt' : 'all clear'),
   ].join('');
 
-  // Per-agent breakdown
   const rows = [
-    { agent: 'Triage',       data: STATE.triage       },
-    { agent: 'Investigator', data: STATE.investigator },
-    { agent: 'Auditor',      data: STATE.auditor      },
+    { name: 'Triage',       data: STATE.triage },
+    { name: 'Investigator', data: STATE.investigator },
+    { name: 'Auditor',      data: STATE.auditor },
   ];
   el('breakdownBody').innerHTML = rows.map(r => {
     if (!r.data) return '';
     const m = r.data.metrics;
     return `<tr>
-      <td class="agent-cell">${r.agent}</td>
-      <td class="model-cell">${m.model}</td>
+      <td class="agent-name-cell">${r.name}</td>
       <td>${fmt.ms(m.latency_ms)}</td>
       <td>${fmt.tokens(m.tokens_in)}</td>
       <td>${fmt.tokens(m.tokens_out)}</td>
@@ -322,142 +436,132 @@ function populateResults(auditorEvent) {
     </tr>`;
   }).join('');
 
-  // Eval metrics — RAG precision from this run
-  const ragPrecision = STATE.investigator?.output?.rag_precision;
+  const reasoning = STATE.auditor?.output?.reasoning || '';
+  el('reasoningSummary').innerHTML = reasoning
+    ? `<div class="section-title" style="margin-top:28px">Decision rationale</div>
+       <div class="reasoning-box">${esc(reasoning)}</div>`
+    : '';
+
   const evalCards = [];
-
-  if (ragPrecision !== undefined) {
-    evalCards.push(`<div class="eval-card">
-      <div class="metric-label">RAG precision (this run)</div>
-      <div class="metric-value">${fmt.score(ragPrecision)}</div>
-      <div class="metric-sub">LLM judge over retrieved chunks</div>
+  const ragP = STATE.investigator?.output?.rag_precision;
+  if (ragP !== undefined) {
+    evalCards.push(`<div class="eval-tile">
+      <div class="metric-tile-label">RAG precision (this run)</div>
+      <div class="metric-tile-value">${fmt.score(ragP)}</div>
+      <div class="metric-tile-sub">LLM judge · retrieved chunks</div>
     </div>`);
   }
-
-  // Try to show F1 score if eval has been run
   if (window._f1Score !== undefined) {
-    evalCards.push(`<div class="eval-card">
-      <div class="metric-label">F1 score (batch eval)</div>
-      <div class="metric-value">${fmt.f1(window._f1Score)}</div>
-      <div class="metric-sub">IEEE-CIS eval set · ${window._f1Samples ?? '?'} samples</div>
+    evalCards.push(`<div class="eval-tile">
+      <div class="metric-tile-label">F1 score (batch eval)</div>
+      <div class="metric-tile-value">${fmt.f1(window._f1Score)}</div>
+      <div class="metric-tile-sub">IEEE-CIS · ${window._f1Samples ?? '?'} samples</div>
     </div>`);
   }
-
   el('evalRow').innerHTML = evalCards.join('');
 }
 
 // ── SSE pipeline runner ───────────────────────────────────────────────────────
-
 async function runPipeline(formData) {
   let response;
   try {
     response = await fetch(`${API}/resolve`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(formData),
-      signal:  AbortSignal.timeout(120_000),
+      body: JSON.stringify(formData),
+      signal: AbortSignal.timeout(120_000),
     });
-  } catch (err) {
-    showError('Pipeline error — check backend is running on :8000');
-    resetForm();
-    return;
+  } catch {
+    showErr('Cannot connect to backend — is uvicorn running on :8000?');
+    resetForm(); return;
   }
-
   if (!response.ok) {
-    showError(`Backend error: ${response.status} ${response.statusText}`);
-    resetForm();
-    return;
+    if (response.status === 422) {
+      try {
+        const body = await response.json();
+        const details = body.detail;
+        const msg = Array.isArray(details)
+          ? details.map(d => d.msg.replace('Value error, ', '')).join('; ')
+          : JSON.stringify(details);
+        showErr(`Validation: ${msg}`);
+      } catch { showErr(`Validation error — check your inputs.`); }
+    } else {
+      showErr(`Backend error: ${response.status}`);
+    }
+    resetForm(); return;
   }
 
-  const reader  = response.body.getReader();
-  const decoder = new TextDecoder();
-  let   buffer  = '';
+  const reader = response.body.getReader();
+  const dec    = new TextDecoder();
+  let   buf    = '';
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep incomplete last line
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
 
       for (const line of lines) {
         if (line.startsWith('data:')) {
           const raw = line.slice(5).trim();
           if (!raw || raw === '{}') continue;
-          try {
-            const event = JSON.parse(raw);
-            handleAgentEvent(event);
-          } catch (_) { /* malformed — skip */ }
-        }
-        if (line.startsWith('event: done')) {
-          // Final event — advance to results if not a violation
-          const verdict = STATE.auditor?.output?.verdict;
-          if (verdict && verdict !== 'policy_violation') {
-            setTimeout(() => {
-              advanceStep(4);
-              showPanel(5);
-            }, 600);
-          }
+          try { dispatch(JSON.parse(raw)); } catch { /* skip malformed */ }
         }
       }
     }
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      showError('Stream interrupted — ' + err.message);
-    }
+    if (err.name !== 'AbortError') showErr('Stream interrupted: ' + err.message);
   }
 }
 
-function handleAgentEvent(event) {
-  if (event.error) {
-    showError('Agent error: ' + event.error);
-    return;
-  }
+async function dispatch(event) {
+  if (event.error) { showErr('Agent error: ' + event.error); return; }
 
   switch (event.agent) {
     case 'triage':
       populateTriage(event);
-      advanceStep(2);
+      completeStep(2);
       showPanel(2);
-      setStepState(3, 'active');
+      setStep(3, 'active');
+      // Show panel 3 immediately so the tool animation is visible
       showPanel(3);
       break;
 
     case 'investigator':
+      // Start animation (async); panel 3 is already visible
       populateInvestigator(event);
-      advanceStep(3);
-      showPanel(3);
-      setStepState(4, 'active');
-      showPanel(4);
+      completeStep(3);
+      setStep(4, 'active');
+      // Show panel 4 after animation completes
+      invAnimDone.then(() => showPanel(4));
       break;
 
     case 'auditor':
+      // populateAuditor awaits invAnimDone internally
       populateAuditor(event);
-      advanceStep(4);
-      showPanel(4);
+      completeStep(4);
       break;
   }
 }
 
-// ── Form handling ─────────────────────────────────────────────────────────────
-
-function fillForm(sample) {
-  el('f_txn_id').value     = sample.transaction_id;
-  el('f_amount').value     = sample.amount;
-  el('f_merchant').value   = sample.merchant;
-  el('f_reason').value     = sample.reason_code;
-  el('f_statement').value  = sample.customer_statement;
+// ── Form ──────────────────────────────────────────────────────────────────────
+function fillForm(s) {
+  el('f_txn').value   = s.transaction_id;
+  el('f_amt').value   = s.amount;
+  el('f_merch').value = s.merchant;
+  el('f_reason').value= s.reason_code;
+  el('f_stmt').value  = s.customer_statement;
 }
 
 function readForm() {
   return {
-    transaction_id:     el('f_txn_id').value.trim(),
-    amount:             parseFloat(el('f_amount').value),
-    merchant:           el('f_merchant').value.trim(),
+    transaction_id:     el('f_txn').value.trim(),
+    amount:             parseFloat(el('f_amt').value),
+    merchant:           el('f_merch').value.trim(),
     reason_code:        el('f_reason').value,
-    customer_statement: el('f_statement').value.trim(),
+    customer_statement: el('f_stmt').value.trim(),
   };
 }
 
@@ -465,129 +569,144 @@ function disableForm() {
   el('submitBtn').disabled = true;
   el('disputeForm').querySelectorAll('input,select,textarea').forEach(e => e.disabled = true);
 }
-
 function resetForm() {
   el('submitBtn').disabled = false;
   el('disputeForm').querySelectorAll('input,select,textarea').forEach(e => e.disabled = false);
 }
 
-function resetPipeline() {
-  // Clear state
+function resetAll() {
   STATE.triage = STATE.investigator = STATE.auditor = null;
+  invAnimDone = Promise.resolve();
 
-  // Reset step bar
-  [1,2,3,4,5].forEach(n => setStepState(n, n === 1 ? 'active' : 'pending'));
+  [1,2,3,4,5].forEach(n => setStep(n, n === 1 ? 'active' : 'pending'));
 
-  // Clear panels
-  ['triageEntities','maskedStatement','triageMetrics',
-   'toolLog','ragBlock','signalList','recBadge','invMetrics',
-   'rulesBody','auditorMetrics','auditPre',
-   'totalsGrid','breakdownBody','evalRow'].forEach(id => {
-    const node = el(id);
-    if (node) node.innerHTML = '';
+  // Clear dynamic content
+  ['triagePills','maskedStmt','triageMetrics',
+   'toolTimeline','ragCard','signalList','recBadge','invMetrics',
+   'probMeta','decisionPath','featureList',
+   'rulesList','auditorMetrics','auditPre',
+   'summaryGrid','breakdownBody','evalRow'].forEach(id => {
+    const node = el(id); if (node) node.innerHTML = '';
   });
+  el('probBar').style.width = '0%';
+  el('classifierPred').className = 'classifier-pred';
+  el('classifierPred').textContent = '';
 
-  // Reset loading states
-  ['triageLoading','invLoading','auditorLoading'].forEach(id => {
-    el(id).classList.remove('hidden');
-  });
-  ['triageContent','invContent','auditorContent'].forEach(id => {
-    el(id).classList.add('hidden');
-  });
+  el('triageStatus').innerHTML  = '<span class="spinner-sm"></span> Running…';
+  el('triageStatus').className  = 'agent-status';
+  el('invStatus').innerHTML     = '<span class="spinner-sm"></span> Running…';
+  el('invStatus').className     = 'agent-status';
+  el('auditorStatus').innerHTML = '<span class="spinner-sm"></span> Running…';
+  el('auditorStatus').className = 'agent-status';
+
+  el('triageBody').classList.add('hidden');
+  el('invBodyExtra').classList.add('hidden');
+  el('auditorBody').classList.add('hidden');
   el('violationBanner').classList.add('hidden');
-  el('auditPre').classList.add('hidden');
   el('violationActions').classList.add('hidden');
-  el('errorBanner').classList.add('hidden');
-  el('auditorVerdict').className = 'verdict-badge large';
-  el('auditorVerdict').textContent = '';
-  el('confidenceFill').style.width = '0%';
+  el('auditPre').classList.add('hidden');
+  el('liveIndicator').classList.add('hidden');
+  el('errBanner').classList.add('hidden');
+
+  // Reset reasoning boxes
+  el('reasoningBox').classList.add('hidden');
+  el('reasoningBox').textContent = '';
+  el('reasoningSummary').innerHTML = '';
+
+  // Reset flag button
+  const reviewBtn = el('reviewBtn');
+  reviewBtn.textContent = 'Flag for manual review';
+  reviewBtn.disabled = false;
+  reviewBtn.classList.remove('flag-success');
+
+  // Clear field validation errors
+  [['f_txn','err_txn'],['f_amt','err_amt'],['f_merch','err_merch'],['f_stmt','err_stmt']].forEach(
+    ([fid, eid]) => setFieldError(fid, eid, null)
+  );
 
   resetForm();
   showPanel(1);
 }
 
-// ── Error display ─────────────────────────────────────────────────────────────
-
-function showError(msg) {
-  const banner = el('errorBanner');
-  banner.textContent = msg;
-  banner.classList.remove('hidden');
-  setTimeout(() => banner.classList.add('hidden'), 6000);
+// ── Misc ──────────────────────────────────────────────────────────────────────
+function showErr(msg) {
+  const b = el('errBanner');
+  b.textContent = msg;
+  b.classList.remove('hidden');
+  setTimeout(() => b.classList.add('hidden'), 7000);
 }
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
-
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// ── Eval results (F1 score) ───────────────────────────────────────────────────
 
 async function loadEvalResults() {
   try {
-    const res = await fetch(`${API}/eval-results`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.f1 !== undefined) {
-      window._f1Score   = data.f1;
-      window._f1Samples = data.n_samples;
-    }
-  } catch (_) { /* backend not running or no results yet */ }
+    const r = await fetch(`${API}/eval-results`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.f1 !== undefined) { window._f1Score = d.f1; window._f1Samples = d.n_samples; }
+  } catch { /* backend not running yet */ }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', () => {
-  // Load sample F1 results if available
   loadEvalResults();
+  fillForm(SAMPLES.approve);
 
-  // Sample buttons
-  el('loadApprove').addEventListener('click', () => fillForm(SAMPLES.approve));
-  el('loadViolation').addEventListener('click', () => fillForm(SAMPLES.violation));
+  // Stepper: clicking any non-pending step navigates to that panel
+  el('stepper').addEventListener('click', e => {
+    const item = e.target.closest('.step-item');
+    if (!item || item.dataset.state === 'pending') return;
+    showPanel(parseInt(item.dataset.step));
+  });
 
-  // Reset buttons
-  el('resetBtn').addEventListener('click', resetPipeline);
-  el('resetFromViolation').addEventListener('click', resetPipeline);
-  el('reviewBtn').addEventListener('click', () =>
-    alert('Manual review queue: feature not implemented in this demo.')
+  // Clear per-field validation error on user input
+  [['f_txn','err_txn'],['f_amt','err_amt'],['f_merch','err_merch'],['f_stmt','err_stmt']].forEach(
+    ([fid, eid]) => el(fid).addEventListener('input', () => setFieldError(fid, eid, null))
   );
 
-  // Audit log toggle
+  el('loadApprove').addEventListener('click',    () => fillForm(SAMPLES.approve));
+  el('loadViolation').addEventListener('click',  () => fillForm(SAMPLES.violation));
+  el('resetBtn').addEventListener('click',       resetAll);
+  el('resetFromViolation').addEventListener('click', resetAll);
+  el('reviewBtn').addEventListener('click', async () => {
+    const btn = el('reviewBtn');
+    if (btn.classList.contains('flag-success')) return;
+    const txnId = STATE.triage?.output?.transaction_id || 'unknown';
+    btn.textContent = 'Flagging…';
+    btn.disabled = true;
+    try {
+      await fetch(`${API}/flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction_id: txnId }),
+      });
+      btn.textContent = '✓ Flagged for review';
+      btn.classList.add('flag-success');
+    } catch {
+      btn.textContent = 'Flag for manual review';
+      btn.disabled = false;
+    }
+  });
+
   el('auditToggle').addEventListener('click', () => {
     const pre = el('auditPre');
     const hidden = pre.classList.toggle('hidden');
-    el('auditToggle').textContent = (hidden ? '▶' : '▼') + ' View audit log entry';
+    el('auditToggle').textContent = (hidden ? 'Show' : 'Hide') + ' audit log entry ' + (hidden ? '↓' : '↑');
   });
 
-  // Form submit
-  el('disputeForm').addEventListener('submit', async (e) => {
+  el('disputeForm').addEventListener('submit', async e => {
     e.preventDefault();
+    if (!validateForm()) return;
     const data = readForm();
 
-    if (!data.transaction_id || !data.merchant || !data.customer_statement) {
-      showError('Please fill in all fields.');
-      return;
-    }
-    if (isNaN(data.amount) || data.amount <= 0) {
-      showError('Amount must be a positive number.');
-      return;
-    }
-
     disableForm();
-    el('errorBanner').classList.add('hidden');
+    el('liveIndicator').classList.remove('hidden');
+    el('errBanner').classList.add('hidden');
 
-    // Advance to triage panel immediately to show "running" state
-    setStepState(1, 'complete');
-    setStepState(2, 'active');
+    setStep(1, 'complete');
+    setStep(2, 'active');
     showPanel(2);
 
     await runPipeline(data);
-  });
 
-  // Pre-fill with clean dispute sample on load
-  fillForm(SAMPLES.approve);
+    el('liveIndicator').classList.add('hidden');
+  });
 });

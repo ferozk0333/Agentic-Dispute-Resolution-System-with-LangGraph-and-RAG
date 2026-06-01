@@ -1,0 +1,35 @@
+{
+  "features": [
+    "transaction_amt",
+    "amt_vs_typical_ratio",
+    "velocity_24h",
+    "velocity_amt_24h",
+    "geo_mismatch",
+    "merchant_risk_score",
+    "is_high_risk_category",
+    "email_domain_risk",
+    "unique_locations_24h"
+  ],
+  "max_depth": 6,
+  "eval": {
+    "f1": 0.8571,
+    "precision": 0.7842,
+    "recall": 0.945,
+    "roc_auc": 0.9748,
+    "cv_f1": 0.851
+  },
+  "feature_importances": {
+    "velocity_24h": 0.6315,
+    "merchant_risk_score": 0.2873,
+    "velocity_amt_24h": 0.0283,
+    "unique_locations_24h": 0.0276,
+    "geo_mismatch": 0.0198,
+    "transaction_amt": 0.0049,
+    "amt_vs_typical_ratio": 0.0006,
+    "is_high_risk_category": 0.0,
+    "email_domain_risk": 0.0
+  },
+  "fraud_threshold": 0.5,
+  "training_rows": 5000,
+  "fraud_rows": 1000
+}

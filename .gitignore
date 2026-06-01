@@ -17,6 +17,10 @@ data/
 *.jsonl
 visa-rules-public.pdf
 
+# Classifier — generated artifacts (not source)
+backend/classifier/training_data.csv
+backend/classifier/fraud_dt.joblib
+
 # IDE
 .vscode/
 .idea/

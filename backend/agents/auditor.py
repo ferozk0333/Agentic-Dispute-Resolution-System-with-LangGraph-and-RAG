@@ -11,6 +11,7 @@ On every run, appends a structured entry to audit_log.jsonl.
 """
 import json
 import os
+import sqlite3
 import time
 from datetime import date, datetime, timezone
 from typing import Optional
@@ -23,6 +24,7 @@ from pydantic import BaseModel
 
 from backend.agents.triage import AgentMetrics, DisputeInput, TriageOutput
 from backend.agents.investigator import InvestigatorOutput
+from backend.tools.sql_tool import DB_PATH
 
 load_dotenv()
 
@@ -46,6 +48,7 @@ class AuditorOutput(BaseModel):
     verdict:       str               # approve | reject | policy_violation | escalate
     rules_checked: list[AuditRuleResult]
     violations:    list[str]
+    reasoning:     str               # 2-3 sentence plain-language explanation
 
 
 # ── System prompt ─────────────────────────────────────────────────────────────
@@ -69,11 +72,62 @@ Output ONLY valid JSON:
   "rules_checked": [
     {"rule": string, "passed": bool, "detail": string}
   ],
-  "violations": [string]
-}\
+  "violations": [string],
+  "reasoning": string
+}
+
+reasoning: 2-3 sentences in plain language explaining the verdict. Name the specific signals
+or rule failures that drove the decision, and state what action is recommended (e.g. refund
+issued, claim denied, case escalated to a senior analyst).\
 """
 
 # ── Deterministic pre-checks ──────────────────────────────────────────────────
+
+def _get_db_transaction_date(transaction_id: str) -> Optional[str]:
+    """Read transaction_date directly from demo_disputes as a fallback when triage didn't extract it."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT transaction_date FROM demo_disputes WHERE transaction_id = ?",
+            (transaction_id,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row and row[0]:
+            return str(row[0])
+    except Exception:
+        pass
+    return None
+
+
+def _check_transaction_exists(transaction_id: str) -> AuditRuleResult:
+    """Verify the transaction_id is present in demo_disputes before processing."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM demo_disputes WHERE transaction_id = ?",
+            (transaction_id,),
+        )
+        found = cur.fetchone() is not None
+        conn.close()
+    except Exception as exc:
+        return AuditRuleResult(
+            rule="transaction_exists",
+            passed=False,
+            detail=f"database lookup failed: {exc}",
+        )
+    return AuditRuleResult(
+        rule="transaction_exists",
+        passed=found,
+        detail=(
+            f"transaction_id={transaction_id} verified in demo_disputes"
+            if found else
+            f"transaction_id={transaction_id} not found in demo_disputes; no record to dispute"
+        ),
+    )
+
 
 def _parse_date(s: str) -> Optional[date]:
     """Try ISO first, then fall back to dateutil for natural language dates."""
@@ -95,15 +149,18 @@ def _check_dispute_window(
     if not transaction_date_str:
         return AuditRuleResult(
             rule="dispute_window",
-            passed=True,
-            detail="transaction_date not provided — cannot verify window, defaulting pass",
+            passed=False,
+            detail=(
+                "transaction_date not extracted from statement; "
+                "120-day window cannot be verified — manual confirmation required"
+            ),
         )
     txn_date = _parse_date(transaction_date_str)
     if txn_date is None:
         return AuditRuleResult(
             rule="dispute_window",
             passed=True,
-            detail=f"transaction_date unparseable ({transaction_date_str!r}) — defaulting pass",
+            detail=f"transaction_date unparseable ({transaction_date_str!r}), defaulting pass",
         )
     delta  = (filing_date - txn_date).days
     passed = delta <= max_days
@@ -191,7 +248,7 @@ def _check_confidence_floor(
         return AuditRuleResult(
             rule="confidence_floor",
             passed=True,
-            detail="recommendation=escalate — floor does not apply",
+            detail="recommendation=escalate; confidence floor not applicable",
         )
     passed = confidence >= floor
     return AuditRuleResult(
@@ -206,8 +263,11 @@ def pre_check_rules(
     investigator: InvestigatorOutput,
     filing_date:  date,
 ) -> list[AuditRuleResult]:
+    # Prefer the date extracted by triage; fall back to the DB record if triage missed it
+    txn_date = triage.entities.transaction_date or _get_db_transaction_date(triage.transaction_id)
     return [
-        _check_dispute_window(triage.entities.transaction_date, filing_date),
+        _check_transaction_exists(triage.transaction_id),
+        _check_dispute_window(txn_date, filing_date),
         _check_refund_threshold(triage.amount),
         _check_reason_code_match(triage.reason_code, triage.entities.dispute_category),
         _check_no_duplicate(triage.transaction_id),

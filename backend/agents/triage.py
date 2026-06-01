@@ -13,7 +13,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 load_dotenv()
 
@@ -27,12 +27,57 @@ MODEL = "gpt-4o-mini"
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+_VALID_REASON_CODES = {"10.4", "10.5", "11.3", "12.1", "12.4", "12.5", "13.1", "13.2"}
+
+
 class DisputeInput(BaseModel):
     transaction_id: str
     amount: float
     merchant: str
     reason_code: str
     customer_statement: str
+
+    @field_validator("transaction_id")
+    @classmethod
+    def txn_id_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("transaction_id cannot be empty")
+        return v
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("amount must be greater than 0")
+        if v > 1_000_000:
+            raise ValueError("amount exceeds the $1,000,000 single-dispute limit")
+        return round(v, 2)
+
+    @field_validator("merchant")
+    @classmethod
+    def merchant_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("merchant cannot be empty")
+        return v
+
+    @field_validator("reason_code")
+    @classmethod
+    def reason_code_valid(cls, v: str) -> str:
+        if v not in _VALID_REASON_CODES:
+            raise ValueError(
+                f"reason_code must be one of {sorted(_VALID_REASON_CODES)}"
+            )
+        return v
+
+    @field_validator("customer_statement")
+    @classmethod
+    def statement_min_length(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 20:
+            raise ValueError("customer_statement must be at least 20 characters")
+        return v
 
 
 class TriageEntities(BaseModel):
@@ -67,9 +112,11 @@ Your job:
 1. Extract structured entities from the customer dispute input.
 2. Mask PERSONAL PII only in the masked_statement field:
    - Personal names (people) → [NAME]
-   - Personal locations/addresses → [LOCATION]
+   - Personal home/mailing addresses → [LOCATION]
    - Personal contact details (email, phone, account numbers) → [CONTACT]
-   DO NOT mask business/merchant names, product names, or transaction amounts.
+   DO NOT mask: business/merchant names, product names, transaction amounts, dates, times,
+   cities used as destinations (e.g. "shipped to Dubai"), or any other non-personal information.
+   Dates such as "May 30, 2026" or "March 18th" are NEVER PII — leave them as-is.
    Copy transaction_id, amount, merchant, and reason_code verbatim from the input.
 3. Output ONLY valid JSON matching the schema below. No prose, no explanation.
 
@@ -87,7 +134,11 @@ Output schema:
   }
 }
 
-transaction_date: extract and normalise to ISO 8601 (YYYY-MM-DD). If only month/year is mentioned, use the 1st of that month. If no date is mentioned, set null.
+transaction_date: Extract the date the disputed charge occurred from the customer statement.
+Any mention of a date ("May 30, 2026", "March 18th", "last Friday") MUST be extracted and
+normalised to ISO 8601 (YYYY-MM-DD). For relative dates, anchor to 2024-01-01 as a proxy.
+If only month/year is mentioned, use the 1st of that month. Set null ONLY if no date at all
+appears anywhere in the statement. This field is critical — do not omit it if a date is present.
 High-value = amount > $1000. Time-sensitive = customer mentions travel, emergency, or recurring charge.\
 """
 

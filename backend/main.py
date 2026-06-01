@@ -15,15 +15,26 @@ A final `event: done` signals the stream is closed.
 """
 import asyncio
 import json
+import os
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from pydantic import BaseModel
+
 from backend.agents.triage import DisputeInput
 from backend.graph import DisputeState, _initial_state, build_graph
+
+_AUDIT_LOG = os.getenv("AUDIT_LOG_PATH", "./data/audit_log.jsonl")
+
+
+class FlagRequest(BaseModel):
+    transaction_id: str
+    reason: str = "Flagged for manual review via UI"
 
 load_dotenv()
 
@@ -130,6 +141,21 @@ async def resolve_dispute(dispute: DisputeInput):
     )
 
 
+@app.post("/flag")
+async def flag_for_review(body: FlagRequest):
+    """Append a manual-review flag entry to the audit log."""
+    entry = {
+        "type":           "manual_review_flag",
+        "timestamp":      datetime.now(timezone.utc).isoformat(),
+        "transaction_id": body.transaction_id,
+        "reason":         body.reason,
+    }
+    os.makedirs(os.path.dirname(_AUDIT_LOG) or ".", exist_ok=True)
+    with open(_AUDIT_LOG, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return {"flagged": True, "transaction_id": body.transaction_id}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -137,7 +163,6 @@ async def health():
 
 @app.get("/eval-results")
 async def eval_results():
-    from fastapi import HTTPException
     path = "./data/eval_results.json"
     if not os.path.exists(path):
         raise HTTPException(

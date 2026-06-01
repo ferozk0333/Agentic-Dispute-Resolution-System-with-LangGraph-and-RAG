@@ -44,6 +44,7 @@ Follow this sequence exactly. Do not skip ahead.
 3. `docs/ARCHITECTURE.md` — wire LangGraph state graph once agents are individually tested.
 4. `docs/METRICS.md` — instrument after pipeline runs end-to-end.
 5. `docs/FRONTEND.md` — build UI last, consuming the FastAPI `/resolve` endpoint.
+6. `docs/CLASSIFIER.md` — generate synthetic data, train DT, verify inference tool works standalone.
 
 ## Stack
 

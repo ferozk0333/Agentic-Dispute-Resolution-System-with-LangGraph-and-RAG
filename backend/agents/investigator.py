@@ -19,6 +19,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from backend.agents.triage import AgentMetrics, TriageOutput
+from backend.tools.classifier_tool import run_fraud_classifier
 from backend.tools.rag_tool import compute_rag_precision, search_compliance_docs
 from backend.tools.risk_tool import check_merchant_risk
 from backend.tools.sql_tool import query_transactions
@@ -36,11 +37,12 @@ PRICING = {
 # ── Output schema ─────────────────────────────────────────────────────────────
 
 class InvestigatorOutput(BaseModel):
-    recommendation:   str           # approve | reject | escalate
-    confidence:       float
-    fraud_signals:    list[str]
+    recommendation:    str           # approve | reject | escalate
+    confidence:        float
+    fraud_signals:     list[str]
     rag_source_clause: str
-    rag_precision:    float
+    rag_precision:     float
+    classifier_output: Optional[dict] = None  # captured from run_fraud_classifier tool call
 
 
 # ── Tool definitions (OpenAI function calling format) ─────────────────────────
@@ -98,6 +100,37 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "run_fraud_classifier",
+            "description": (
+                "Run the interpretable Decision Tree fraud classifier on transaction features. "
+                "Call AFTER query_transactions, get_velocity_history, and check_merchant_risk — "
+                "you need their outputs to populate the inputs. "
+                "Returns fraud probability, prediction, and an explainable decision path."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "transaction_amt":       {"type": "number"},
+                    "velocity_24h":          {"type": "integer"},
+                    "velocity_amt_24h":      {"type": "number"},
+                    "geo_mismatch":          {"type": "integer", "enum": [0, 1]},
+                    "merchant_risk_score":   {"type": "number"},
+                    "is_high_risk_category": {"type": "integer", "enum": [0, 1]},
+                    "email_domain_risk":     {"type": "integer", "enum": [0, 1]},
+                    "unique_locations_24h":  {"type": "integer"},
+                    "typical_amt_max":       {"type": "number"},
+                },
+                "required": [
+                    "transaction_amt", "velocity_24h", "velocity_amt_24h",
+                    "geo_mismatch", "merchant_risk_score", "is_high_risk_category",
+                    "email_domain_risk", "unique_locations_24h",
+                ],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_compliance_docs",
             "description": (
                 "Search the Visa compliance rulebook for relevant dispute rules. "
@@ -118,14 +151,39 @@ TOOLS = [
 # ── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
-You are a fraud investigator at a payment network. You have access to four tools.
+You are a fraud investigator at a payment network. You have access to five tools.
 Use them in this order:
-1. query_transactions — get the full transaction record
-2. get_velocity_history — check recent card activity for anomalies
-3. check_merchant_risk — get the merchant's risk profile
-4. search_compliance_docs — retrieve the applicable Visa dispute rule
+1. query_transactions    — get the full transaction record
+2. get_velocity_history  — check recent card activity for anomalies
+3. check_merchant_risk   — get the merchant's risk profile
+4. run_fraud_classifier  — get the DT fraud probability and decision path
+5. search_compliance_docs — retrieve the applicable Visa dispute rule
 
-After calling all tools, output ONLY valid JSON:
+After calling tools 1–3, derive these features for run_fraud_classifier:
+- transaction_amt:       query_transactions.transaction_amt
+- velocity_24h:          get_velocity_history.transaction_count
+- velocity_amt_24h:      get_velocity_history.total_amount
+- geo_mismatch:          1 if query_transactions.card_country != query_transactions.txn_country, else 0
+- merchant_risk_score:   check_merchant_risk.risk_score
+- is_high_risk_category: 1 if check_merchant_risk.risk_category == "high", else 0
+- email_domain_risk:     1 if query_transactions.p_email_domain contains any of
+                         [tempmail, protonmail, guerrilla, throwam], else 0
+- unique_locations_24h:  len(get_velocity_history.unique_countries)
+- typical_amt_max:       check_merchant_risk.typical_amt_max (use 500 if not available)
+
+The classifier output is your primary fraud signal. Your confidence score MUST be
+within 0.10 of fraud_probability unless the compliance docs reveal a rule that
+overrides it (e.g. the transaction is outside the dispute window regardless of fraud signal).
+
+When calling search_compliance_docs, construct a targeted query that includes:
+- The exact Visa reason code (e.g. "10.4", "13.1", "12.5")
+- The dispute type keywords (e.g. "unauthorized card-absent", "merchandise not received",
+  "cancelled recurring", "incorrect amount")
+- Visa terminology: "chargeback", "dispute condition", "cardholder", "merchant liability"
+Example for reason code 10.4: "reason code 10.4 unauthorized card-absent environment chargeback dispute"
+Example for reason code 13.1: "reason code 13.1 merchandise not received dispute condition"
+
+After calling all five tools, output ONLY valid JSON:
 {
   "recommendation": "approve" | "reject" | "escalate",
   "confidence": float (0.0–1.0),
@@ -136,16 +194,19 @@ After calling all tools, output ONLY valid JSON:
 
 Rules:
 - confidence > 0.85 required to recommend approve or reject. Otherwise: escalate.
-- Always cite the exact Visa rule clause. If not found, set rag_source_clause to "NOT FOUND" and escalate.
-- fraud_signals must be specific: "3 transactions in 2 hours" not "unusual activity".\
+- rag_source_clause must be the verbatim text from the compliance doc result. Set to "NOT FOUND"
+  only if search_compliance_docs returned zero results or an explicit NOT FOUND error.
+- fraud_signals must be specific: "3 transactions in 2 hours" not "unusual activity".
+- Always include the classifier decision_path in your fraud_signals list.\
 """
 
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 _TOOL_MAP = {
-    "query_transactions":   query_transactions,
-    "get_velocity_history": get_velocity_history,
-    "check_merchant_risk":  check_merchant_risk,
+    "query_transactions":    query_transactions,
+    "get_velocity_history":  get_velocity_history,
+    "check_merchant_risk":   check_merchant_risk,
+    "run_fraud_classifier":  run_fraud_classifier,
     "search_compliance_docs": search_compliance_docs,
 }
 
@@ -179,9 +240,10 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
     total_completion = 0
     t0 = time.perf_counter()
 
-    # Track the last RAG call so we can compute objective precision after the loop
-    last_rag_query:  Optional[str]       = None
-    last_rag_chunks: Optional[list[dict]] = None
+    # Track RAG call for objective precision; classifier output for SSE payload
+    last_rag_query:       Optional[str]       = None
+    last_rag_chunks:      Optional[list[dict]] = None
+    last_classifier_output: Optional[dict]    = None
 
     while True:
         response = client.chat.completions.create(
@@ -198,9 +260,7 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
         msg = response.choices[0].message
 
         if msg.tool_calls:
-            # Append the assistant turn (with tool_calls)
             messages.append(msg)
-            # Dispatch each tool call and append results
             for tc in msg.tool_calls:
                 name = tc.function.name
                 args = json.loads(tc.function.arguments)
@@ -209,6 +269,8 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
                 result = _dispatch(name, args)
                 if name == "search_compliance_docs":
                     last_rag_chunks = result if isinstance(result, list) else None
+                if name == "run_fraud_classifier":
+                    last_classifier_output = result if isinstance(result, dict) else None
                 messages.append({
                     "role":         "tool",
                     "tool_call_id": tc.id,
@@ -226,11 +288,13 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
                 raw = raw.rsplit("```", 1)[0].strip()
             output = InvestigatorOutput.model_validate(json.loads(raw))
 
-            # Replace self-reported rag_precision with objective LLM judge score
+            updates: dict = {}
             if last_rag_query and last_rag_chunks:
-                output = output.model_copy(
-                    update={"rag_precision": compute_rag_precision(last_rag_query, last_rag_chunks)}
-                )
+                updates["rag_precision"] = compute_rag_precision(last_rag_query, last_rag_chunks)
+            if last_classifier_output:
+                updates["classifier_output"] = last_classifier_output
+            if updates:
+                output = output.model_copy(update=updates)
 
             metrics = AgentMetrics(
                 model=MODEL,
