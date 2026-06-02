@@ -15,6 +15,7 @@ import sqlite3
 import time
 from datetime import date, datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from dateutil import parser as dateutil_parser
 
@@ -24,6 +25,7 @@ from pydantic import BaseModel
 
 from backend.agents.triage import AgentMetrics, DisputeInput, TriageOutput
 from backend.agents.investigator import InvestigatorOutput
+from backend.governance.audit_writer import AuditRecord, write_audit_record
 from backend.tools.sql_tool import DB_PATH
 
 load_dotenv()
@@ -56,29 +58,66 @@ class AuditorOutput(BaseModel):
 SYSTEM_PROMPT = """\
 You are an independent compliance auditor at a payment network.
 
-All five policy rules have already been evaluated deterministically and their
-boolean results are provided to you. Your job is to compile the final output:
-- Accept the pre-computed "passed" values exactly as given — do not override them.
-- Write a concise, specific "detail" string for each rule.
-- Determine the verdict:
-    • If ANY rule has passed=false  → "policy_violation"
-    • If all rules passed AND Agent 2 recommendation is "escalate" → "escalate"
-    • If all rules passed → adopt Agent 2's recommendation verbatim
-- List every rule name whose passed=false in "violations" (empty array if none).
+All policy rules have already been evaluated deterministically. Their boolean results
+and detail strings are provided. Your job is to compile the final verdict.
+
+── RULE CLASSIFICATION ──────────────────────────────────────────────────────────
+
+Hard rules — failure here means the case cannot be processed as submitted:
+  • transaction_exists   — transaction must exist in the database
+  • refund_threshold     — dispute amount must not exceed the auto-processing limit
+  • no_duplicate         — transaction must not have been previously resolved
+  • reason_code_match    — reason code must align with the dispute category
+
+Adjudication rules — failure here shapes the verdict but is not a policy breach:
+  • dispute_window       — 120-day Visa filing window; failure means the claim is
+                           time-barred and must be rejected on eligibility grounds
+  • confidence_floor     — investigator confidence below threshold; case requires
+                           human review before a final approve/reject can be issued
+
+── VERDICT LOGIC (apply in order, stop at first match) ─────────────────────────
+
+1. If ANY hard rule has passed=false
+   → verdict = "policy_violation"
+   → violations = [names of all failed hard rules]
+
+2. Else if dispute_window has passed=false
+   → verdict = "reject"
+   → violations = []
+   → reasoning must state the claim is time-barred under Visa §11 dispute window rules
+
+3. Else if confidence_floor has passed=false
+   → verdict = "escalate"
+   → violations = []
+   → reasoning must state that automated confidence is insufficient for a final decision
+
+4. Else if all rules passed AND Agent 2 recommendation is "escalate"
+   → verdict = "escalate"
+   → violations = []
+
+5. Else (all rules passed, Agent 2 is approve or reject)
+   → adopt Agent 2's recommendation verbatim as the verdict
+   → violations = []
+
+── INSTRUCTIONS ─────────────────────────────────────────────────────────────────
+
+- Accept every pre-computed "passed" value exactly as given — do not override.
+- Write a concise, specific "detail" string for each rule (keep the facts from the
+  pre-computed detail; add interpretive context where useful).
+- "violations" lists only the names of failed hard rules. Leave it empty for
+  adjudication rule failures (dispute_window, confidence_floor).
+- "reasoning": 2-3 sentences in plain language naming the specific signals or rule
+  results that drove the verdict. State the recommended action (e.g. refund issued,
+  claim denied as time-barred, escalated to senior analyst for manual review).
+- Do not use em dashes (—) anywhere in your output. Use a period or comma instead.
 
 Output ONLY valid JSON:
 {
   "verdict": "approve" | "reject" | "policy_violation" | "escalate",
-  "rules_checked": [
-    {"rule": string, "passed": bool, "detail": string}
-  ],
+  "rules_checked": [{"rule": string, "passed": bool, "detail": string}],
   "violations": [string],
   "reasoning": string
-}
-
-reasoning: 2-3 sentences in plain language explaining the verdict. Name the specific signals
-or rule failures that drove the decision, and state what action is recommended (e.g. refund
-issued, claim denied, case escalated to a senior analyst).\
+}\
 """
 
 # ── Deterministic pre-checks ──────────────────────────────────────────────────
@@ -122,9 +161,9 @@ def _check_transaction_exists(transaction_id: str) -> AuditRuleResult:
         rule="transaction_exists",
         passed=found,
         detail=(
-            f"transaction_id={transaction_id} verified in demo_disputes"
+            f"Record confirmed in database for {transaction_id}"
             if found else
-            f"transaction_id={transaction_id} not found in demo_disputes; no record to dispute"
+            f"No database record found for {transaction_id}. Cannot dispute a non-existent transaction."
         ),
     )
 
@@ -149,25 +188,26 @@ def _check_dispute_window(
     if not transaction_date_str:
         return AuditRuleResult(
             rule="dispute_window",
-            passed=False,
-            detail=(
-                "transaction_date not extracted from statement; "
-                "120-day window cannot be verified — manual confirmation required"
-            ),
+            passed=True,
+            detail="Transaction date not provided. The 120-day Visa window requires manual confirmation before finalising.",
         )
     txn_date = _parse_date(transaction_date_str)
     if txn_date is None:
         return AuditRuleResult(
             rule="dispute_window",
             passed=True,
-            detail=f"transaction_date unparseable ({transaction_date_str!r}), defaulting pass",
+            detail=f"Transaction date format unrecognized ({transaction_date_str!r}). Window check skipped, defaulted to pass.",
         )
     delta  = (filing_date - txn_date).days
     passed = delta <= max_days
     return AuditRuleResult(
         rule="dispute_window",
         passed=passed,
-        detail=f"transaction_date={txn_date}, filing_date={filing_date}, gap={delta} days (limit {max_days})",
+        detail=(
+            f"Filed {delta} days after the transaction date, within the {max_days}-day Visa dispute window"
+            if passed else
+            f"Dispute is time-barred: {delta} days have elapsed since {txn_date}, exceeding the {max_days}-day Visa limit"
+        ),
     )
 
 
@@ -176,7 +216,11 @@ def _check_refund_threshold(amount: float, limit: float = 5000.0) -> AuditRuleRe
     return AuditRuleResult(
         rule="refund_threshold",
         passed=passed,
-        detail=f"amount=${amount:,.2f} (limit ${limit:,.2f})",
+        detail=(
+            f"Dispute amount ${amount:,.2f} is within the ${limit:,.2f} automated processing limit"
+            if passed else
+            f"Dispute amount ${amount:,.2f} exceeds the ${limit:,.2f} automated processing limit. Requires manual approval."
+        ),
     )
 
 
@@ -185,7 +229,7 @@ def _check_no_duplicate(transaction_id: str) -> AuditRuleResult:
         return AuditRuleResult(
             rule="no_duplicate",
             passed=True,
-            detail="no prior audit log found",
+            detail="No prior dispute resolutions found in the audit log",
         )
     seen = False
     try:
@@ -203,7 +247,11 @@ def _check_no_duplicate(transaction_id: str) -> AuditRuleResult:
     return AuditRuleResult(
         rule="no_duplicate",
         passed=not seen,
-        detail=f"transaction_id={transaction_id} {'already resolved' if seen else 'not seen before'}",
+        detail=(
+            f"No prior settlement on record for {transaction_id}"
+            if not seen else
+            f"A final settlement already exists for {transaction_id}. Cannot process the same transaction twice."
+        ),
     )
 
 
@@ -223,17 +271,16 @@ def _check_reason_code_match(reason_code: str, dispute_category: str) -> AuditRu
         return AuditRuleResult(
             rule="reason_code_match",
             passed=True,
-            detail=f"reason_code={reason_code!r} has no mapping — defaulting pass",
+            detail=f"Reason code {reason_code!r} has no defined category mapping, defaulted to pass.",
         )
     passed = dispute_category in allowed
     return AuditRuleResult(
         rule="reason_code_match",
         passed=passed,
         detail=(
-            f"reason_code={reason_code} (category {prefix}.x) "
-            f"{'matches' if passed else 'does not match'} "
-            f"dispute_category={dispute_category!r} "
-            f"(allowed: {sorted(allowed)})"
+            f"Reason code {reason_code} is valid for a '{dispute_category}' dispute"
+            if passed else
+            f"Reason code {reason_code} does not support '{dispute_category}' disputes (valid categories: {sorted(allowed)})"
         ),
     )
 
@@ -248,13 +295,17 @@ def _check_confidence_floor(
         return AuditRuleResult(
             rule="confidence_floor",
             passed=True,
-            detail="recommendation=escalate; confidence floor not applicable",
+            detail="Recommendation is escalate. Confidence threshold is not evaluated for escalated cases.",
         )
     passed = confidence >= floor
     return AuditRuleResult(
         rule="confidence_floor",
         passed=passed,
-        detail=f"confidence={confidence:.2f} (floor {floor:.2f}), recommendation={recommendation}",
+        detail=(
+            f"Investigator confidence {confidence:.0%} meets the {floor:.0%} minimum for an automated {recommendation} decision"
+            if passed else
+            f"Investigator confidence {confidence:.0%} is below the {floor:.0%} minimum. Human review required before issuing a {recommendation} decision."
+        ),
     )
 
 
@@ -282,9 +333,10 @@ def _track_cost(prompt_tokens: int, completion_tokens: int, model: str = MODEL) 
     return (prompt_tokens / 1000 * p["input"]) + (completion_tokens / 1000 * p["output"])
 
 
-# ── Audit log writer ──────────────────────────────────────────────────────────
+# ── Audit record builder ───────────────────────────────────────────────────────
 
-def _write_audit_log(
+def _build_and_write_audit(
+    run_id:              str,
     dispute:             DisputeInput,
     triage:              TriageOutput,
     investigator:        InvestigatorOutput,
@@ -293,29 +345,65 @@ def _write_audit_log(
     investigator_metrics: AgentMetrics,
     auditor_metrics:     AgentMetrics,
 ) -> None:
-    os.makedirs(os.path.dirname(AUDIT_LOG) or ".", exist_ok=True)
-    entry = {
-        "timestamp":      datetime.now(timezone.utc).isoformat(),
-        "transaction_id": dispute.transaction_id,
-        "final_verdict":  auditor.verdict,
-        "violations":     auditor.violations,
-        "triage":         triage.model_dump(),
-        "investigator":   investigator.model_dump(),
-        "auditor":        auditor.model_dump(),
-        "metrics": {
-            "triage":       triage_metrics.model_dump(),
-            "investigator": investigator_metrics.model_dump(),
-            "auditor":      auditor_metrics.model_dump(),
-            "total_cost_usd": round(
-                triage_metrics.cost_usd
-                + investigator_metrics.cost_usd
-                + auditor_metrics.cost_usd,
-                6,
-            ),
-        },
-    }
-    with open(AUDIT_LOG, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+    clf = investigator.classifier_output or {}
+    record = AuditRecord(
+        run_id           = run_id,
+        transaction_id   = dispute.transaction_id,
+        timestamp        = datetime.now(timezone.utc).isoformat(),
+        raw_input        = dispute.model_dump(),
+
+        triage_entities    = triage.entities.model_dump(),
+        triage_masked_stmt = triage.masked_statement,
+        triage_latency_ms  = triage_metrics.latency_ms,
+        triage_tokens_in   = triage_metrics.tokens_in,
+        triage_tokens_out  = triage_metrics.tokens_out,
+        triage_cost_usd    = triage_metrics.cost_usd,
+
+        inv_tool_calls_log  = investigator.tool_calls_log,
+        inv_dt_fraud_prob   = clf.get("fraud_probability", 0.0),
+        inv_dt_prediction   = clf.get("prediction", "unknown"),
+        inv_dt_confidence   = clf.get("confidence", 0.0),
+        inv_dt_decision_path = clf.get("decision_path", []),
+        inv_dt_top_features = clf.get("top_features", []),
+        inv_rag_query       = investigator.rag_query,
+        inv_rag_chunks      = investigator.rag_chunks,
+        inv_rag_precision   = investigator.rag_precision,
+        inv_recommendation  = investigator.recommendation,
+        inv_confidence      = investigator.confidence,
+        inv_fraud_signals   = investigator.fraud_signals,
+        inv_llm_reasoning   = investigator.llm_reasoning,
+        inv_latency_ms      = investigator_metrics.latency_ms,
+        inv_tokens_in       = investigator_metrics.tokens_in,
+        inv_tokens_out      = investigator_metrics.tokens_out,
+        inv_cost_usd        = investigator_metrics.cost_usd,
+
+        aud_rules_checked  = [r.model_dump() for r in auditor.rules_checked],
+        aud_violations     = auditor.violations,
+        aud_verdict        = auditor.verdict,
+        aud_latency_ms     = auditor_metrics.latency_ms,
+        aud_tokens_in      = auditor_metrics.tokens_in,
+        aud_tokens_out     = auditor_metrics.tokens_out,
+        aud_cost_usd       = auditor_metrics.cost_usd,
+
+        total_latency_ms = round(
+            triage_metrics.latency_ms + investigator_metrics.latency_ms + auditor_metrics.latency_ms, 1
+        ),
+        total_tokens = (
+            triage_metrics.tokens_in + triage_metrics.tokens_out
+            + investigator_metrics.tokens_in + investigator_metrics.tokens_out
+            + auditor_metrics.tokens_in + auditor_metrics.tokens_out
+        ),
+        total_cost_usd = round(
+            triage_metrics.cost_usd + investigator_metrics.cost_usd + auditor_metrics.cost_usd, 6
+        ),
+
+        model_triage      = "gpt-4o-mini",
+        model_investigator = "gpt-4o",
+        model_auditor     = "gpt-4o-mini",
+        dt_model_version  = clf.get("model_version", "dt_v1"),
+        pipeline_version  = os.getenv("PIPELINE_VERSION", "v1.0.0"),
+    )
+    write_audit_record(record)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
@@ -329,9 +417,9 @@ def run_auditor(
     filing_date:          Optional[date] = None,
 ) -> tuple[AuditorOutput, AgentMetrics]:
     """
-    Run all five deterministic rule checks, then call the LLM to compile the
-    final structured output (verdict + detail strings). Writes to audit_log.jsonl.
+    Run deterministic rule checks, compile verdict via LLM, write full audit record.
     """
+    run_id = str(uuid4())
     if filing_date is None:
         filing_date = date.today()
 
@@ -370,9 +458,9 @@ def run_auditor(
         cost_usd=round(_track_cost(response.usage.prompt_tokens, response.usage.completion_tokens), 6),
     )
 
-    # ── 3. Write audit log ────────────────────────────────────────────────────
-    _write_audit_log(
-        dispute, triage, investigator, output,
+    # ── 3. Write full audit record ────────────────────────────────────────────
+    _build_and_write_audit(
+        run_id, dispute, triage, investigator, output,
         triage_metrics, investigator_metrics, auditor_metrics,
     )
 
@@ -386,8 +474,8 @@ if __name__ == "__main__":
     from backend.agents.triage import run_triage
     from backend.agents.investigator import run_investigator
 
-    # filing_date anchored to demo data era so dispute_window checks are realistic
-    DEMO_FILING_DATE = date(2024, 3, 20)
+    # filing_date matches demo data era (transactions now use 2026 dates)
+    DEMO_FILING_DATE = date(2026, 5, 31)
 
     samples = [
         # 0 — clean unauthorized, should escalate (confidence < 0.85)

@@ -43,6 +43,11 @@ class InvestigatorOutput(BaseModel):
     rag_source_clause: str
     rag_precision:     float
     classifier_output: Optional[dict] = None  # captured from run_fraud_classifier tool call
+    # Audit trail fields — populated by run_investigator, consumed by audit_writer
+    tool_calls_log:    list[dict] = []   # [{tool, args, result, status}]
+    rag_query:         str = ""
+    rag_chunks:        list[dict] = []
+    llm_reasoning:     str = ""
 
 
 # ── Tool definitions (OpenAI function calling format) ─────────────────────────
@@ -153,10 +158,10 @@ TOOLS = [
 SYSTEM_PROMPT = """\
 You are a fraud investigator at a payment network. You have access to five tools.
 Use them in this order:
-1. query_transactions    — get the full transaction record
-2. get_velocity_history  — check recent card activity for anomalies
-3. check_merchant_risk   — get the merchant's risk profile
-4. run_fraud_classifier  — get the DT fraud probability and decision path
+1. query_transactions     — fetch the full transaction record
+2. get_velocity_history   — check recent card activity for velocity anomalies
+3. check_merchant_risk    — get the merchant risk score and category
+4. run_fraud_classifier   — get DT fraud probability and decision path
 5. search_compliance_docs — retrieve the applicable Visa dispute rule
 
 After calling tools 1–3, derive these features for run_fraud_classifier:
@@ -175,13 +180,44 @@ The classifier output is your primary fraud signal. Your confidence score MUST b
 within 0.10 of fraud_probability unless the compliance docs reveal a rule that
 overrides it (e.g. the transaction is outside the dispute window regardless of fraud signal).
 
-When calling search_compliance_docs, construct a targeted query that includes:
-- The exact Visa reason code (e.g. "10.4", "13.1", "12.5")
-- The dispute type keywords (e.g. "unauthorized card-absent", "merchandise not received",
-  "cancelled recurring", "incorrect amount")
-- Visa terminology: "chargeback", "dispute condition", "cardholder", "merchant liability"
-Example for reason code 10.4: "reason code 10.4 unauthorized card-absent environment chargeback dispute"
-Example for reason code 13.1: "reason code 13.1 merchandise not received dispute condition"
+── RAG QUERY FORMAT ─────────────────────────────────────────────────────────────
+
+When calling search_compliance_docs, use ONLY this template — no conversational phrasing:
+
+  "Visa Dispute Condition [X.Y] [Condition Name] – [Subtopic]"
+
+[Subtopic] must be one of:
+  Time Limit | Dispute Reason | Invalid Disputes | Processing Requirements
+
+Canonical reason code map:
+  10.1  EMV Liability Shift Counterfeit Fraud           §11.7.2
+  10.3  Other Fraud – Card-Present Environment          §11.7.4
+  10.4  Other Fraud – Card-Absent Environment           §11.7.5
+  10.5  Visa Fraud Monitoring Program                   §11.7.6
+  11.1  Card Recovery Bulletin or Stop Payment          §11.8.1
+  12.1  Late Presentment                                §11.9.1
+  12.4  Incorrect Account Number                        §11.9.3
+  12.5  Incorrect Amount                                §11.9.4
+  12.6  Duplicate Processing / Paid by Other Means      §11.9.5
+  13.1  Merchandise / Services Not Received             §11.10.2
+  13.2  Cancelled Recurring Transaction                 §11.10.3
+
+Standard query patterns (follow exactly, substituting the correct code):
+  Time limit check      → "Visa Dispute Condition 10.4 Card-Absent Environment – Time Limit"
+  Dispute reason        → "Visa Dispute Condition 10.4 Card-Absent Environment – Dispute Reason"
+  Invalid dispute rules → "Visa Dispute Condition 10.4 Card-Absent Environment – Invalid Disputes"
+  Processing docs       → "Visa Dispute Condition 13.1 Merchandise Not Received – Processing Requirements"
+
+Additional examples:
+  "Visa Dispute Condition 13.1 Merchandise Not Received – Time Limit"
+  "Visa Dispute Condition 12.6 Duplicate Processing Paid by Other Means – Time Limit"
+  "Visa Dispute Condition 10.3 Card-Present Fraud – Time Limit"
+  "Visa Dispute Condition 13.2 Cancelled Recurring Transaction – Time Limit"
+
+Do not write conversational queries. Do not omit the reason code number. Do not paraphrase
+the condition name. Always query for the Time Limit subtopic for any dispute eligibility check.
+
+── OUTPUT ────────────────────────────────────────────────────────────────────────
 
 After calling all five tools, output ONLY valid JSON:
 {
@@ -194,10 +230,10 @@ After calling all five tools, output ONLY valid JSON:
 
 Rules:
 - confidence > 0.85 required to recommend approve or reject. Otherwise: escalate.
-- rag_source_clause must be the verbatim text from the compliance doc result. Set to "NOT FOUND"
+- rag_source_clause must be verbatim text from the compliance doc result. Set to "NOT FOUND"
   only if search_compliance_docs returned zero results or an explicit NOT FOUND error.
-- fraud_signals must be specific: "3 transactions in 2 hours" not "unusual activity".
-- Always include the classifier decision_path in your fraud_signals list.\
+- fraud_signals must be specific: "3 transactions in 2 hours across 2 countries" not "unusual activity".
+- Always include the classifier decision_path as one fraud_signals entry.\
 """
 
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
@@ -240,10 +276,11 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
     total_completion = 0
     t0 = time.perf_counter()
 
-    # Track RAG call for objective precision; classifier output for SSE payload
-    last_rag_query:       Optional[str]       = None
-    last_rag_chunks:      Optional[list[dict]] = None
-    last_classifier_output: Optional[dict]    = None
+    # Track tool calls for audit trail + objective RAG precision + classifier SSE payload
+    tool_calls_log:         list[dict]         = []
+    last_rag_query:         Optional[str]      = None
+    last_rag_chunks:        Optional[list]     = None
+    last_classifier_output: Optional[dict]     = None
 
     while True:
         response = client.chat.completions.create(
@@ -267,6 +304,8 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
                 if name == "search_compliance_docs":
                     last_rag_query = args.get("query", "")
                 result = _dispatch(name, args)
+                status = "error" if isinstance(result, dict) and "error" in result else "ok"
+                tool_calls_log.append({"tool": name, "args": args, "result": result, "status": status})
                 if name == "search_compliance_docs":
                     last_rag_chunks = result if isinstance(result, list) else None
                 if name == "run_fraud_classifier":
@@ -279,8 +318,10 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
         else:
             # No more tool calls — parse final JSON response
             latency_ms = (time.perf_counter() - t0) * 1000
+            # Capture raw LLM text before stripping for audit replay
+            raw_reasoning = msg.content or ""
             # Strip markdown code fences that gpt-4o sometimes wraps around JSON
-            raw = (msg.content or "").strip()
+            raw = raw_reasoning.strip()
             if raw.startswith("```"):
                 raw = raw.split("```", 2)[1]
                 if raw.startswith("json"):
@@ -288,13 +329,17 @@ def run_investigator(triage: TriageOutput) -> tuple[InvestigatorOutput, AgentMet
                 raw = raw.rsplit("```", 1)[0].strip()
             output = InvestigatorOutput.model_validate(json.loads(raw))
 
-            updates: dict = {}
+            updates: dict = {
+                "tool_calls_log": tool_calls_log,
+                "rag_query":      last_rag_query or "",
+                "rag_chunks":     last_rag_chunks or [],
+                "llm_reasoning":  raw_reasoning,
+            }
             if last_rag_query and last_rag_chunks:
                 updates["rag_precision"] = compute_rag_precision(last_rag_query, last_rag_chunks)
             if last_classifier_output:
                 updates["classifier_output"] = last_classifier_output
-            if updates:
-                output = output.model_copy(update=updates)
+            output = output.model_copy(update=updates)
 
             metrics = AgentMetrics(
                 model=MODEL,

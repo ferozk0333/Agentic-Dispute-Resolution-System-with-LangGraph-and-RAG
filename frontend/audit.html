@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DisputeAI — Audit Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Top bar ───────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <rect width="28" height="28" rx="7" fill="#4f46e5"/>
+          <path d="M8 14l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="logo-name">DisputeAI</span>
+      </div>
+      <span class="topbar-divider"></span>
+      <span class="topbar-subtitle">Audit Dashboard</span>
+    </div>
+    <div class="topbar-right">
+      <a href="index.html" class="topbar-audit-link">← Demo</a>
+    </div>
+  </header>
+
+  <main class="audit-main">
+
+    <!-- ── Stats header ──────────────────────────────────────────── -->
+    <div class="audit-stats-grid">
+      <div class="audit-stat-card">
+        <div class="audit-stat-label">Total runs</div>
+        <div class="audit-stat-value" id="total-runs">—</div>
+      </div>
+      <div class="audit-stat-card v-approve">
+        <div class="audit-stat-label">Approved</div>
+        <div class="audit-stat-value" id="stat-approved">—</div>
+      </div>
+      <div class="audit-stat-card v-reject">
+        <div class="audit-stat-label">Rejected</div>
+        <div class="audit-stat-value" id="stat-rejected">—</div>
+      </div>
+      <div class="audit-stat-card v-escalate">
+        <div class="audit-stat-label">Escalated</div>
+        <div class="audit-stat-value" id="stat-escalated">—</div>
+      </div>
+      <div class="audit-stat-card v-policy_violation">
+        <div class="audit-stat-label">Violations</div>
+        <div class="audit-stat-value" id="stat-violations">—</div>
+      </div>
+      <div class="audit-stat-card">
+        <div class="audit-stat-label">Total cost</div>
+        <div class="audit-stat-value" id="stat-cost">—</div>
+      </div>
+      <div class="audit-stat-card">
+        <div class="audit-stat-label">Avg latency</div>
+        <div class="audit-stat-value" id="stat-latency">—</div>
+      </div>
+      <div class="audit-stat-card">
+        <div class="audit-stat-label">Avg RAG precision</div>
+        <div class="audit-stat-value" id="stat-rag">—</div>
+      </div>
+    </div>
+
+    <!-- ── Filter bar ────────────────────────────────────────────── -->
+    <div class="audit-filter-bar">
+      <select id="verdictFilter" class="audit-select">
+        <option value="">All verdicts</option>
+        <option value="approve">Approved</option>
+        <option value="reject">Rejected</option>
+        <option value="escalate">Escalated</option>
+        <option value="policy_violation">Policy violation</option>
+      </select>
+      <input type="text" id="txnSearch" class="audit-search" placeholder="Search TXN ID…">
+      <button class="btn-ghost" id="refreshBtn">Refresh</button>
+    </div>
+
+    <!-- ── Runs table ─────────────────────────────────────────────── -->
+    <div class="audit-table-wrap card">
+      <table class="runs-table">
+        <thead>
+          <tr>
+            <th>TXN ID</th>
+            <th>Timestamp</th>
+            <th>Verdict</th>
+            <th>DT Prob</th>
+            <th>Confidence</th>
+            <th>Violations</th>
+            <th>Cost</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody id="runsBody">
+          <tr><td colspan="8" class="table-empty">Loading runs…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Pagination ─────────────────────────────────────────────── -->
+    <div class="audit-pagination" id="pagination"></div>
+
+    <!-- ── Replay panel ──────────────────────────────────────────── -->
+    <div id="replayPanel" class="replay-panel hidden">
+
+      <div class="replay-banner" id="replayBanner"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h2 class="replay-heading">Dispute replay</h2>
+        <button class="btn-ghost" id="closeReplay">✕ Close replay</button>
+      </div>
+
+      <!-- Agent 1 — Triage -->
+      <div class="replay-section">
+        <div class="replay-agent-header">
+          <div class="agent-badge triage" style="width:32px;height:32px;font-size:11px">A1</div>
+          <div>
+            <div class="replay-agent-name">Triage &amp; Router</div>
+            <div class="agent-model">Entity extraction · PII masking</div>
+          </div>
+        </div>
+        <div class="section-title" style="margin-top:16px">Extracted entities</div>
+        <div class="pills-row" id="rp-triagePills"></div>
+        <div class="section-title" style="margin-top:16px">PII-masked statement</div>
+        <div class="code-box" id="rp-maskedStmt"></div>
+        <div class="metrics-strip" id="rp-triageMetrics"></div>
+      </div>
+
+      <!-- Agent 2 — Investigator -->
+      <div class="replay-section">
+        <div class="replay-agent-header">
+          <div class="agent-badge investigator" style="width:32px;height:32px;font-size:11px">A2</div>
+          <div>
+            <div class="replay-agent-name">Investigator</div>
+            <div class="agent-model">Tool execution · RAG retrieval · DT classifier</div>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:16px">Tool call log</div>
+        <div class="tool-timeline" id="rp-toolLog"></div>
+
+        <!-- Classifier -->
+        <div style="margin-top:20px">
+          <div class="section-title">Classifier output</div>
+          <div class="classifier-card" id="rp-classifierCard">
+            <div class="classifier-top">
+              <div class="classifier-prob">
+                <div class="prob-label">Fraud probability</div>
+                <div class="prob-bar-wrap"><div class="prob-bar" id="rp-probBar"></div></div>
+                <div class="prob-meta" id="rp-probMeta"></div>
+              </div>
+              <div class="classifier-pred" id="rp-classifierPred"></div>
+            </div>
+            <div class="classifier-detail">
+              <div class="two-col-layout">
+                <div>
+                  <div class="sub-title">Decision path</div>
+                  <div class="decision-path" id="rp-decisionPath"></div>
+                </div>
+                <div>
+                  <div class="sub-title">Top features</div>
+                  <div class="feature-list" id="rp-featureList"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RAG chunks + fraud signals -->
+        <div class="two-col-layout" style="margin-top:20px">
+          <div>
+            <div class="section-title">RAG chunks retrieved</div>
+            <div id="rp-ragChunks"></div>
+          </div>
+          <div>
+            <div class="section-title">Fraud signals</div>
+            <ul class="signal-list" id="rp-signalList"></ul>
+          </div>
+        </div>
+
+        <!-- LLM reasoning (collapsible) -->
+        <div style="margin-top:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div class="section-title" style="margin-bottom:0">LLM reasoning</div>
+            <button class="link-btn" id="rp-reasoningToggle">Show ↓</button>
+          </div>
+          <pre class="code-box rp-reasoning-pre hidden" id="rp-reasoning"></pre>
+        </div>
+
+        <!-- Recommendation + confidence -->
+        <div class="verdict-conf-row" style="margin-top:20px">
+          <div>
+            <div class="section-title">Recommendation</div>
+            <div id="rp-recBadge" class="verdict-badge"></div>
+          </div>
+          <div class="conf-block">
+            <div class="section-title">Confidence <span id="rp-confPct" class="conf-pct-label"></span></div>
+            <div class="conf-track"><div class="conf-fill" id="rp-confFill"></div></div>
+          </div>
+        </div>
+
+        <div class="metrics-strip" id="rp-invMetrics"></div>
+      </div>
+
+      <!-- Agent 3 — Auditor -->
+      <div class="replay-section">
+        <div class="replay-agent-header">
+          <div class="agent-badge auditor" style="width:32px;height:32px;font-size:11px">A3</div>
+          <div>
+            <div class="replay-agent-name">Auditor</div>
+            <div class="agent-model">Deterministic policy checks</div>
+          </div>
+        </div>
+
+        <div id="rp-violationBanner" class="alert-banner hidden" style="margin-top:16px"></div>
+
+        <div class="section-title" style="margin-top:16px">Policy rules</div>
+        <div class="rules-list" id="rp-rulesList"></div>
+
+        <div style="margin-top:16px">
+          <div class="section-title">Verdict</div>
+          <div id="rp-verdict" class="verdict-badge large"></div>
+        </div>
+
+        <div class="reasoning-box" id="rp-audReasoning" style="margin-top:16px"></div>
+
+        <div class="metrics-strip" id="rp-audMetrics"></div>
+      </div>
+
+      <!-- Pipeline totals -->
+      <div class="replay-section">
+        <div class="section-title">Pipeline totals</div>
+        <div class="metrics-strip" id="rp-totals"></div>
+      </div>
+
+    </div><!-- /replayPanel -->
+
+  </main>
+
+  <div id="errBanner" class="err-banner hidden"></div>
+  <script src="audit.js"></script>
+</body>
+</html>

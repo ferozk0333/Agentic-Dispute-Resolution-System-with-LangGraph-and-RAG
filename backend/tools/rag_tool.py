@@ -17,7 +17,7 @@ load_dotenv()
 
 CHROMA_DIR  = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma")
 MMR_LAMBDA  = 0.7   # weight: 1.0 = pure relevance, 0.0 = pure diversity
-FETCH_MULTI = 4     # fetch top_k * FETCH_MULTI candidates before MMR rerank
+FETCH_MULTI = 6     # fetch top_k * FETCH_MULTI candidates before MMR rerank
 
 _client     = None
 _chroma     = None

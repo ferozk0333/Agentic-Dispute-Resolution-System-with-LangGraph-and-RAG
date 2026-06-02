@@ -26,13 +26,24 @@ dispute-agent/
 │   │   ├── rag_tool.py
 │   │   ├── risk_tool.py
 │   │   └── velocity_tool.py
+│   │   └── classifier_tool.py
+│   ├── classifier/
+│   │   ├── calibrate.py
+│   │   ├── generate_training_data.py
+│   │   ├── train.py
+│   │   ├── fraud_dt.joblib        (generated)
+│   │   └── model_metadata.json   (generated)
+│   ├── governance/
+│   │   └── audit_writer.py
 │   └── data/
 │       ├── ingest_ieee.py
 │       └── ingest_visa_rules.py
 └── frontend/
     ├── index.html
+    ├── audit.html
     ├── style.css
-    └── app.js
+    ├── app.js
+    └── audit.js
 ```
 
 ## Build order
@@ -45,6 +56,7 @@ Follow this sequence exactly. Do not skip ahead.
 4. `docs/METRICS.md` — instrument after pipeline runs end-to-end.
 5. `docs/FRONTEND.md` — build UI last, consuming the FastAPI `/resolve` endpoint.
 6. `docs/CLASSIFIER.md` — generate synthetic data, train DT, verify inference tool works standalone.
+7. `docs/GOVERNANCE.md` — add audit writer, audit endpoints, integrate into LangGraph graph.
 
 ## Stack
 
@@ -103,9 +115,15 @@ open frontend/index.html                  # open UI in browser
 
 ## Definition of done
 
-- [ ] Single dispute resolves end-to-end through all three agents
-- [ ] UI shows per-agent latency, token usage, and cost at each step
-- [ ] Audit log entry written to `audit_log.jsonl` on every run
-- [ ] Batch eval script produces F1 score on IEEE-CIS test set
-- [ ] RAG tool returns source clause (section + page) alongside retrieved text
-- [ ] Policy violation correctly halts pipeline and logs violation type
+ Single dispute resolves end-to-end through all three agents
+ UI shows per-agent latency, token usage, and cost at each step
+ Full AuditRecord written to audit_log.jsonl AND audit_runs SQLite table on every run
+ Batch eval script produces F1 score on IEEE-CIS test set
+ RAG tool returns source clause (section + page) alongside retrieved text
+ Policy violation correctly halts pipeline and logs violation type
+ DT classifier runs as tool in Agent 2, decision path visible in UI
+ GET /audit/runs returns paginated run list
+ GET /audit/runs/{run_id} returns full record for replay
+ audit.html renders replay panel from stored AuditRecord
+ Replay panel shows DT path, RAG chunks, LLM reasoning, and policy checks
+ Replay banner distinguishes stored replay from live run

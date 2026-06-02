@@ -34,12 +34,22 @@ const fmt = {
 
 // ── Tool definitions for the investigator animation ───────────────────────────
 const TOOL_DEFS = [
-  { id: 'sql',        icon: 'DB',  iconClass: 'db',    name: 'query_transactions',    label: 'Transaction DB lookup' },
-  { id: 'velocity',   icon: 'V',   iconClass: 'speed', name: 'get_velocity_history',   label: 'Card velocity check (24h)' },
-  { id: 'risk',       icon: 'MR',  iconClass: 'risk',  name: 'check_merchant_risk',    label: 'Merchant risk profile' },
-  { id: 'classifier', icon: 'DT',  iconClass: 'doc',   name: 'run_fraud_classifier',   label: 'Decision Tree fraud classifier' },
-  { id: 'rag',        icon: 'RAG', iconClass: 'doc',   name: 'search_compliance_docs', label: 'Visa rulebook retrieval' },
+  { id: 'sql',        icon: 'DB',  iconClass: 'db',    name: 'query_transactions',         label: 'Fetches full transaction record from the database' },
+  { id: 'velocity',   icon: 'V',   iconClass: 'speed', name: 'get_velocity_history',        label: 'Analyzes card activity and spend patterns over 24 hours' },
+  { id: 'risk',       icon: 'MR',  iconClass: 'risk',  name: 'check_merchant_risk',         label: 'Scores merchant for risk level and fraud category' },
+  { id: 'classifier', icon: 'DT',  iconClass: 'doc',   name: 'run_fraud_classifier',        label: 'Scores fraud probability using an interpretable Decision Tree' },
+  { id: 'rag',        icon: 'RAG', iconClass: 'doc',   name: 'search_compliance_docs_RAG',  label: 'Finds applicable Visa Core Rules via semantic vector search' },
 ];
+
+// ── Human-readable rule name labels ──────────────────────────────────────────
+const RULE_DISPLAY = {
+  transaction_exists: 'Transaction Exists in Database',
+  dispute_window:     'Filing Window (120-day Visa limit)',
+  refund_threshold:   'Refund Amount Within Limit',
+  reason_code_match:  'Reason Code Matches Dispute Type',
+  no_duplicate:       'No Prior Settlement on Record',
+  confidence_floor:   'Investigator Confidence Threshold',
+};
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const STATE = { triage: null, investigator: null, auditor: null };
@@ -68,7 +78,11 @@ function verdictClass(v) {
 }
 function verdictLabel(v) {
   return { approve: '✓ Approve', reject: '✗ Reject', escalate: 'Escalate',
-           policy_violation: '⚠ Policy Violation' }[v] || v;
+           policy_violation: 'Policy Violation' }[v] || v;
+}
+
+function stripEmoji(s) {
+  return s.replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
 }
 
 // ── Field validation ──────────────────────────────────────────────────────────
@@ -181,8 +195,11 @@ function renderClassifier(clf) {
     `${(prob * 100).toFixed(1)}% · confidence: ${clf.confidence ?? '—'} · ${clf.model_version ?? 'dt_v1'}`;
 
   const predEl = el('classifierPred');
-  predEl.textContent = pred === 'fraud' ? 'FRAUD' : 'LEGITIMATE';
-  predEl.className   = `classifier-pred ${pred === 'fraud' ? 'fraud' : 'legitimate'}`;
+  const isFraud = pred === 'fraud';
+  predEl.innerHTML = isFraud
+    ? '<span class="pred-label">Transaction Fraudulent</span>'
+    : '<span class="pred-label">Transaction Legitimate</span>';
+  predEl.className = `classifier-pred ${isFraud ? 'fraud' : 'legitimate'}`;
 
   // Decision path
   const pathEl = el('decisionPath');
@@ -240,7 +257,7 @@ async function populateInvestigator(event) {
     {
       status:  clfPred === 'fraud' ? 'warn' : 'ok',
       result:  clf
-        ? `p(fraud)=${clfProb?.toFixed(2)} · ${clfPred}`
+        ? `Fraud probability: ${Math.round((clfProb ?? 0) * 100)}% · ${clfPred === 'fraud' ? 'Transaction flagged as fraudulent' : 'No fraud indicators detected'}`
         : 'Classifier not available',
     },
     {
@@ -304,10 +321,10 @@ async function populateInvestigator(event) {
   el('ragCard').innerHTML =
     `${esc(ragText)}<div class="rag-meta"><span>section: ${esc(o.rag_source_clause?.split(':')[0] || '—')}</span><span>precision: ${fmt.score(o.rag_precision ?? 0)}</span></div>`;
 
-  // Signals
+  // Signals — strip any emoji the LLM may have prepended
   const signals = o.fraud_signals || [];
   el('signalList').innerHTML = signals.length
-    ? signals.map(s => `<li>${esc(s)}</li>`).join('')
+    ? signals.map(s => `<li>${esc(stripEmoji(s))}</li>`).join('')
     : '<li>No specific signals detected</li>';
 
   // Recommendation badge
@@ -354,8 +371,8 @@ async function populateAuditor(event) {
   // Violation banner
   if (isViol && violations.length) {
     const b = el('violationBanner');
-    b.innerHTML = `<div class="alert-banner-title">⚠ Pipeline halted — policy violation detected</div>
-      <ul>${violations.map(v => `<li>${esc(v.replace(/_/g, ' '))}</li>`).join('')}</ul>`;
+    b.innerHTML = `<div class="alert-banner-title">Policy Violation: Pipeline Cannot Proceed Automatically</div>
+      <ul>${violations.map(v => `<li>${esc(RULE_DISPLAY[v] || v.replace(/_/g, ' '))}</li>`).join('')}</ul>`;
     b.classList.remove('hidden');
   }
 
@@ -363,7 +380,7 @@ async function populateAuditor(event) {
   el('rulesList').innerHTML = (o.rules_checked || []).map(r =>
     `<div class="rule-row ${r.passed ? '' : 'fail'}">
        <div class="rule-body">
-         <div class="rule-name-text">${esc(r.rule)}</div>
+         <div class="rule-name-text">${esc(RULE_DISPLAY[r.rule] || r.rule.replace(/_/g, ' '))}</div>
          <div class="rule-detail-text">${esc(r.detail)}</div>
        </div>
        <span class="rule-status-tag ${r.passed ? 'pass' : 'fail'}">${r.passed ? 'Pass' : 'Fail'}</span>

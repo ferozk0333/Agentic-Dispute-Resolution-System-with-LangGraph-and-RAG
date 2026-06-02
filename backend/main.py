@@ -16,11 +16,12 @@ A final `event: done` signals the stream is closed.
 import asyncio
 import json
 import os
+import sqlite3
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -30,6 +31,7 @@ from backend.agents.triage import DisputeInput
 from backend.graph import DisputeState, _initial_state, build_graph
 
 _AUDIT_LOG = os.getenv("AUDIT_LOG_PATH", "./data/audit_log.jsonl")
+_DB_PATH   = os.getenv("SQLITE_DB_PATH",  "./data/disputes.db")
 
 
 class FlagRequest(BaseModel):
@@ -159,6 +161,101 @@ async def flag_for_review(body: FlagRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Audit endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/audit/runs")
+def list_audit_runs(
+    limit:   int            = 20,
+    offset:  int            = 0,
+    verdict: Optional[str]  = None,
+    txn_id:  Optional[str]  = None,
+):
+    """Paginated list of past runs for the audit dashboard table."""
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        conn.row_factory = sqlite3.Row
+
+        where_clauses: list[str] = []
+        params: list = []
+        if verdict:
+            where_clauses.append("final_verdict = ?")
+            params.append(verdict)
+        if txn_id:
+            where_clauses.append("transaction_id LIKE ?")
+            params.append(f"%{txn_id}%")
+
+        where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        rows = conn.execute(
+            f"""
+            SELECT run_id, transaction_id, timestamp, final_verdict,
+                   inv_dt_fraud_prob, inv_recommendation, inv_confidence,
+                   aud_violations_count, total_latency_ms, total_cost_usd,
+                   rag_precision
+            FROM audit_runs
+            {where}
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+            """,
+            params + [limit, offset],
+        ).fetchall()
+
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM audit_runs {where}", params
+        ).fetchone()[0]
+        conn.close()
+
+        return {"total": total, "runs": [dict(r) for r in rows]}
+    except sqlite3.OperationalError:
+        return {"total": 0, "runs": []}
+
+
+@app.get("/audit/runs/{run_id}")
+def get_audit_run(run_id: str):
+    """Full AuditRecord for replay — loads from full_record_json column."""
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        row  = conn.execute(
+            "SELECT full_record_json FROM audit_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        conn.close()
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    return json.loads(row[0])
+
+
+@app.get("/audit/stats")
+def get_audit_stats():
+    """Aggregate stats for the audit dashboard header cards."""
+    try:
+        conn  = sqlite3.connect(_DB_PATH)
+        stats = conn.execute("""
+            SELECT
+                COUNT(*)                                                     AS total_runs,
+                SUM(CASE WHEN final_verdict='approve'          THEN 1 ELSE 0 END) AS approved,
+                SUM(CASE WHEN final_verdict='reject'           THEN 1 ELSE 0 END) AS rejected,
+                SUM(CASE WHEN final_verdict='escalate'         THEN 1 ELSE 0 END) AS escalated,
+                SUM(CASE WHEN final_verdict='policy_violation' THEN 1 ELSE 0 END) AS violations,
+                ROUND(AVG(total_latency_ms), 0)                              AS avg_latency_ms,
+                ROUND(SUM(total_cost_usd), 6)                                AS total_cost_usd,
+                ROUND(AVG(inv_dt_fraud_prob), 3)                             AS avg_fraud_prob,
+                ROUND(AVG(rag_precision), 3)                                 AS avg_rag_precision
+            FROM audit_runs
+        """).fetchone()
+        conn.close()
+    except sqlite3.OperationalError:
+        return {k: 0 for k in ["total_runs","approved","rejected","escalated","violations",
+                                "avg_latency_ms","total_cost_usd","avg_fraud_prob","avg_rag_precision"]}
+
+    keys = ["total_runs","approved","rejected","escalated","violations",
+            "avg_latency_ms","total_cost_usd","avg_fraud_prob","avg_rag_precision"]
+    return dict(zip(keys, stats))
 
 
 @app.get("/eval-results")
