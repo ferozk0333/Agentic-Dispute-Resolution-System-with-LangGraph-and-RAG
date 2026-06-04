@@ -39,8 +39,8 @@ LangGraph + LangChain · OpenAI API · ChromaDB · SQL · FastAPI
 |---|---|
 | RAG Hit@3 | 0.893 |
 | RAG MRR | 0.738 |
-| Classifier CV F1 | 0.853 ± 0.023 |
-| Classifier ROC-AUC | 0.966 ± 0.009 |
+| Classifier CV F1 | 0.853 |
+| Classifier ROC-AUC | 0.966 |
 | Audit completeness | 100% |
 
 ## Quickstart
