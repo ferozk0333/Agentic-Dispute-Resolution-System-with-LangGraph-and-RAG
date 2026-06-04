@@ -1,4 +1,4 @@
-# Environment — never commit secrets
+# Environment
 .env
 .env.*
 
@@ -10,14 +10,14 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Data — too large or generated at runtime
+# Dataset
 data/
 *.csv
 *.db
 *.jsonl
 visa-rules-public.pdf
 
-# Classifier — generated artifacts (not source)
+# Classifier
 backend/classifier/training_data.csv
 backend/classifier/fraud_dt.joblib
 
