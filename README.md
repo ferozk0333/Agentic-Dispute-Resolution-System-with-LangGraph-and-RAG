@@ -1,4 +1,4 @@
-# Agentic Dispute Resolution System with LangGraph and RAG
+# Multi-Agent LLM Pipeline with RAG, Interpretable ML, and Governance
 
 A three-agent pipeline that resolves credit card disputes end-to-end: extracts entities and masks PII, investigates using live tool calls and a RAG-grounded Visa rulebook lookup, then runs deterministic policy checks before issuing a verdict.
 
