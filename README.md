@@ -28,10 +28,10 @@ LangGraph + LangChain · OpenAI API · ChromaDB · SQL · FastAPI
 
 ## Key design decisions
 
-- **Interpretable classifier** — Decision Tree over XGBoost so every prediction exposes a human-readable decision path, not just a score
-- **Hierarchical RAG chunking** — chunks prefixed with ancestor breadcrumbs to retrieve specific Visa rule clauses; Hit@3 improved from 0.25 to 0.893
-- **Agent isolation** — Auditor receives only Agent 2's structured output, never its reasoning trace, enforcing independent adjudication
-- **Deterministic guardrails** — 4 of 6 policy checks run in Python before any LLM call; confidence floor of 0.85 required to approve or reject
+- **Interpretable classifier:** Decision Tree over XGBoost so every prediction exposes a human-readable decision path, not just a score
+- **Hierarchical RAG chunking:** Chunks prefixed with ancestor breadcrumbs to retrieve specific Visa rule clauses; Hit@3 improved from 0.25 to 0.893
+- **Agent isolation:** Auditor receives only Agent 2's structured output, never its reasoning trace, enforcing independent adjudication
+- **Deterministic guardrails:** 4 of 6 policy checks run in Python before any LLM call; confidence floor of 0.85 required to approve or reject
 
 ## Eval
 
