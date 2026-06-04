@@ -17,8 +17,13 @@
     .header-links a:hover { color: #1a1a18; }
     .hero { margin-bottom: 64px; }
     .hero-eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #5f5e5a; margin-bottom: 14px; }
-    .hero h1 { font-size: 32px; font-weight: 500; line-height: 1.25; margin-bottom: 18px; color: #1a1a18; }
-    .hero-lead { font-size: 17px; color: #444441; line-height: 1.7; max-width: 620px; }
+    .hero h1 { font-size: 30px; font-weight: 500; line-height: 1.25; margin-bottom: 18px; color: #1a1a18; }
+    .hero-lead { font-size: 16px; color: #444441; line-height: 1.75; max-width: 680px; }
+    .hero-lead p { margin-bottom: 14px; }
+    .hero-lead p:last-child { margin-bottom: 0; }
+    .ref { font-size: 11px; color: #888780; vertical-align: super; line-height: 0; }
+    .ref a { color: #888780; text-decoration: none; }
+    .ref a:hover { color: #3C3489; }
     .stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #d3d1c7; border: 0.5px solid #d3d1c7; border-radius: 10px; overflow: hidden; margin: 40px 0 64px; }
     .stat-cell { background: #f7f6f2; padding: 20px 22px; }
     .stat-num { font-size: 28px; font-weight: 500; color: #3C3489; font-variant-numeric: tabular-nums; }
@@ -68,9 +73,9 @@
     .num { font-variant-numeric: tabular-nums; font-family: 'SF Mono', monospace; font-size: 13px; }
     .hl { color: #3C3489; font-weight: 500; }
     .muted { color: #888780; }
-    .rag-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .rag-row { display: flex; align-items: center; gap: 12px; }
     .rag-bar-wrap { flex: 1; height: 8px; background: #f1efe8; border-radius: 4px; overflow: hidden; }
-    .rag-bar { height: 100%; border-radius: 4px; }
+    .rag-bar { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
     .rag-val { width: 36px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: #3C3489; font-weight: 500; flex-shrink: 0; }
     .feat-bars { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
     .feat-row { display: flex; align-items: center; gap: 10px; }
@@ -79,12 +84,12 @@
     .feat-bar { height: 100%; border-radius: 3px; background: #7F77DD; }
     .feat-val { width: 40px; text-align: right; font-size: 11px; font-family: 'SF Mono', monospace; color: #888780; flex-shrink: 0; }
     .audit-card { background: #f7f6f2; border: 0.5px solid #d3d1c7; border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
-    .audit-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #ede; font-size: 13px; }
+    .audit-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #e8e7e0; font-size: 13px; gap: 16px; }
     .audit-row:last-child { border-bottom: none; }
-    .audit-key { color: #5f5e5a; font-family: 'SF Mono', monospace; font-size: 12px; }
+    .audit-key { color: #5f5e5a; font-family: 'SF Mono', monospace; font-size: 12px; flex-shrink: 0; }
     .audit-val { font-family: 'SF Mono', monospace; color: #1a1a18; font-size: 12px; text-align: right; }
-    .pass-tag { color: #0F6E56; font-size: 11px; background: #E1F5EE; padding: 2px 8px; border-radius: 4px; }
-    .fail-tag { color: #A32D2D; font-size: 11px; background: #FCEBEB; padding: 2px 8px; border-radius: 4px; }
+    .pass-tag { color: #0F6E56; font-size: 11px; background: #E1F5EE; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+    .fail-tag { color: #A32D2D; font-size: 11px; background: #FCEBEB; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
     .eval-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
     .eval-cell { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 16px 18px; }
     .eval-metric { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #888780; margin-bottom: 6px; }
@@ -103,21 +108,53 @@
     .footer-inner { display: flex; justify-content: space-between; align-items: center; }
     .footer-left { font-size: 13px; color: #888780; }
     .footer-right a { font-size: 13px; color: #3C3489; text-decoration: none; }
-
-    /* Demo GIF placeholder — swap src for your actual GIF */
     .demo-wrap { margin: 28px 0; border: 0.5px solid #d3d1c7; border-radius: 10px; overflow: hidden; background: #f0efe9; }
     .demo-wrap img { width: 100%; display: block; }
     .demo-caption { font-size: 12px; color: #888780; padding: 10px 14px; border-top: 0.5px solid #d3d1c7; }
+
+    /* Decision tree animation */
+    .dt-wrap { background: #EEEDFE; border-radius: 10px; padding: 20px 24px; margin: 16px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; }
+    .dt-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #888780; margin-bottom: 16px; }
+    .dt-node-row { display: flex; align-items: flex-start; gap: 0; margin-bottom: 0; opacity: 0; transform: translateY(6px); transition: opacity 0.4s ease, transform 0.4s ease; }
+    .dt-node-row.visible { opacity: 1; transform: translateY(0); }
+    .dt-branch { color: #AFA9EC; white-space: pre; line-height: 1.9; user-select: none; }
+    .dt-condition { color: #26215C; line-height: 1.9; }
+    .dt-actual { color: #7F77DD; font-size: 11px; margin-left: 6px; }
+    .dt-verdict-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 0.5px solid #AFA9EC; opacity: 0; transition: opacity 0.5s ease; }
+    .dt-verdict-row.visible { opacity: 1; }
+    .dt-verdict-badge { display: inline-flex; align-items: center; gap: 6px; background: #A32D2D; color: #fff; padding: 5px 14px; border-radius: 5px; font-size: 12px; font-weight: 500; }
+    .dt-confidence { font-size: 12px; color: #5f5e5a; }
+    .dt-replay { font-size: 11px; color: #7F77DD; cursor: pointer; border: none; background: none; padding: 0; margin-left: auto; text-decoration: underline; font-family: inherit; }
+    .dt-replay:hover { color: #3C3489; }
+
+    /* Cost callout box */
+    .callout-box { border: 0.5px solid #d3d1c7; border-radius: 10px; padding: 20px 24px; margin: 20px 0; background: #fff; }
+    .callout-box h3 { font-size: 14px; font-weight: 500; margin-bottom: 12px; color: #1a1a18; }
+    .callout-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .callout-cell { background: #f7f6f2; border-radius: 8px; padding: 12px 14px; }
+    .callout-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .callout-val { font-size: 18px; font-weight: 500; color: #3C3489; }
+    .callout-sub { font-size: 11px; color: #888780; margin-top: 2px; }
+
+    /* References */
+    .refs-section { margin-top: 48px; padding-top: 24px; border-top: 0.5px solid #d3d1c7; }
+    .refs-title { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+    .refs-list { display: flex; flex-direction: column; gap: 8px; }
+    .refs-item { font-size: 13px; color: #5f5e5a; line-height: 1.6; display: flex; gap: 10px; }
+    .refs-num { color: #888780; flex-shrink: 0; width: 20px; }
+    .refs-item a { color: #3C3489; text-decoration: none; }
+    .refs-item a:hover { text-decoration: underline; }
+    .refs-item em { font-style: italic; }
   </style>
 </head>
 <body>
 
 <header class="site-header">
   <div class="header-inner">
-    <span class="author-tag"><strong>Feroz Khan</strong> &nbsp;·&nbsp; ML Engineer, Seattle</span>
+    <span class="author-tag"><strong>Feroz Khan</strong> &nbsp;&middot;&nbsp; ML Engineer, Seattle</span>
     <div class="header-links">
-      <a href="https://github.com/ferozk0333/Agentic-Fraud-Detection-System-with-LangGraph-and-RAG" target="_blank">GitHub ↗</a>
-      <a href="https://linkedin.com/in/ferozkhan2/" target="_blank">LinkedIn ↗</a>
+      <a href="https://github.com/YOUR_USERNAME/dispute-agent" target="_blank">GitHub &nearr;</a>
+      <a href="https://linkedin.com/in/YOUR_PROFILE" target="_blank">LinkedIn &nearr;</a>
     </div>
   </div>
 </header>
@@ -125,15 +162,17 @@
 <div class="page">
 
   <div class="hero">
-    <div class="hero-eyebrow">Project write-up &nbsp;·&nbsp; June 2026</div>
-    <h1>A three-agent pipeline for credit card dispute resolution, grounded in real fraud data and real compliance rules</h1>
-    <p class="hero-lead">Most dispute resolution is still manual: an analyst reads a customer statement, checks a transaction record, looks up the applicable rule in a 900-page rulebook, and makes a judgment call. This project automates that pipeline with three LLM agents orchestrated by LangGraph, a Decision Tree classifier that shows its work, a RAG layer grounded in the actual Visa Core Rules, and a governance trail that logs every run.</p>
+    <div class="hero-eyebrow">Project write-up &nbsp;&middot;&nbsp; June 2026</div>
+    <h1>Building an Agentic Credit Card Dispute Redressal System Grounded in Real Fraud Data and Real Compliance Rules</h1>
+    <div class="hero-lead">
+      <p>Credit card disputes are an $83B+ annual problem in the US,<span class="ref"><a href="#ref-1">[1]</a></span> and most resolution is still manual: analysts read statements, check records across fragmented databases, look up the applicable clause in a rulebook, and make a judgment call. Automation exists at the edges, but the core reasoning step remains largely human-driven.</p>
+      <p>This project automates that pipeline with a three-agent system that combines traditional ML with agentic tools orchestrated by LangGraph, grounded in the actual Visa Core Rules.<span class="ref"><a href="#ref-2">[2]</a></span> The goal was not just to get something running but to make deliberate engineering decisions that hold up to scrutiny: interpretable classifiers over black-box models, deterministic policy guards over pure LLM judgment, and a full audit trail for every decision made.</p>
+    </div>
   </div>
 
-  <!-- DEMO GIF — drop your GIF path here -->
   <div class="demo-wrap">
     <img src="demo.gif" alt="Screen recording of a dispute running through the three-agent pipeline">
-    <div class="demo-caption">Full pipeline run: input → triage → investigation with tool calls and DT decision path → auditor policy checks → verdict with per-agent cost breakdown</div>
+    <div class="demo-caption">Full pipeline run: input &rarr; triage &rarr; investigation with tool calls and DT decision path &rarr; auditor policy checks &rarr; verdict with per-agent cost breakdown</div>
   </div>
 
   <div class="stat-strip" style="margin-top:48px">
@@ -146,15 +185,15 @@
       <div class="stat-label">Classifier CV F1</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-num">100%</div>
-      <div class="stat-label">Violation catch rate</div>
+      <div class="stat-num">0.966</div>
+      <div class="stat-label">Classifier ROC-AUC</div>
     </div>
   </div>
 
   <section>
     <div class="section-label">Architecture</div>
     <h2>How the pipeline works</h2>
-    <p>Three agents run sequentially inside a LangGraph <code>StateGraph</code>. Each writes structured output to shared state; the next agent reads only what it is explicitly passed. Click each stage to explore what it does.</p>
+    <p>Three agents run sequentially inside a LangGraph graph. Each writes structured output to shared state; the next agent reads only what it is explicitly passed. Click each stage to explore what it does.</p>
 
     <div class="pipeline-wrap">
       <div class="pipeline-steps" id="pipeline-steps">
@@ -162,7 +201,7 @@
           <div class="step-inner">
             <div class="step-icon" style="background:#7c3aed">A1</div>
             <div class="step-name">Triage</div>
-            <div class="step-sub">Entity extraction</div>
+            <div class="step-sub">NER &middot; PII masking</div>
           </div>
         </button>
         <div class="step-arrow">&rarr;</div>
@@ -197,33 +236,48 @@
   <section>
     <div class="section-label">Stack</div>
     <h2>Technology choices</h2>
-    <div class="stack-row"><span class="stack-layer">Orchestration</span><span class="stack-choice">LangGraph StateGraph &nbsp;<span class="stack-note">sequential agent graph with typed shared state</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Orchestration</span><span class="stack-choice">LangGraph + LangChain</span></div>
     <div class="stack-row"><span class="stack-layer">LLM provider</span><span class="stack-choice">OpenAI API &nbsp;<span class="stack-note">gpt-4o for investigator, gpt-4o-mini for triage and audit</span></span></div>
-    <div class="stack-row"><span class="stack-layer">Vector store</span><span class="stack-choice">ChromaDB &nbsp;<span class="stack-note">local persistent, MMR retrieval</span></span></div>
-    <div class="stack-row"><span class="stack-layer">Transaction DB</span><span class="stack-choice">SQLite + IEEE-CIS &nbsp;<span class="stack-note">25 hand-crafted demo disputes, eval set kept strictly separate</span></span></div>
-    <div class="stack-row"><span class="stack-layer">Backend</span><span class="stack-choice">FastAPI + SSE &nbsp;<span class="stack-note">one event streamed per agent step</span></span></div>
-    <div class="stack-row"><span class="stack-layer">Frontend</span><span class="stack-choice">Vanilla HTML/CSS/JS &nbsp;<span class="stack-note">no framework, no build step</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Vector store</span><span class="stack-choice">ChromaDB</span></div>
+    <div class="stack-row"><span class="stack-layer">Transaction DB</span><span class="stack-choice">SQL &nbsp;<span class="stack-note">50 hand-crafted demo disputes &middot; 5,000-row dataset for classifier training</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Backend</span><span class="stack-choice">Python + FastAPI</span></div>
+    <div class="stack-row"><span class="stack-layer">Frontend</span><span class="stack-choice">HTML / CSS / JS</span></div>
   </section>
 
   <section>
     <div class="section-label">RAG Evaluation</div>
     <h2>Getting the Visa rulebook retrieval right</h2>
-    <p>The Investigator retrieves the specific Visa Core Rules clause that applies to each dispute's reason code and surfaces it verbatim with section number, page, and relevance score. Getting there required four iterations on chunking strategy, evaluated against a golden set of 28 queries drawn directly from the rulebook.</p>
-    <p>The core problem with flat chunking: section headings were being split away from their content. A chunk about the 120-day filing limit had no indication it belonged to §11.7.5.4. The fix was prefixing every chunk with its full ancestor breadcrumb:</p>
-    <p><code style="display:block;padding:10px 14px;line-height:1.6">[§11 Dispute Resolution &gt; §11.7 Dispute Category 10 &gt; §11.7.5 Dispute Condition 10.4 &gt; §11.7.5.4 Dispute Time Limit]</code></p>
+    <p>The Investigator retrieves the specific Visa Core Rules<span class="ref"><a href="#ref-2">[2]</a></span> clause that applies to each dispute's reason code and surfaces it verbatim with section number, page, and relevance score. Getting there required four iterations on chunking strategy, evaluated against a golden set of 50 test queries drawn from the rulebook.</p>
+    <p>The core problem with flat chunking was that section headings were being split away from their content. Some rules were spread across multiple pages, making them nearly impossible to retrieve as a coherent unit without something more structured. A chunk about the 120-day filing limit had no indication it belonged to clause 11.7.5.4. The fix was prefixing every chunk with its full ancestor breadcrumb:<span class="ref"><a href="#ref-3">[3]</a></span></p>
+    <p><code style="display:block;padding:10px 14px;line-height:1.6">[Dispute Resolution &gt; Dispute Category 10 &gt; Dispute Condition 10.4 &gt; Dispute Time Limit]</code></p>
     <p>This gave embeddings enough structural signal to rank by section, not just keyword similarity.</p>
 
     <div id="rag-chart" style="margin:20px 0;display:flex;flex-direction:column;gap:10px"></div>
-    <p style="font-size:13px;color:#888780;margin-top:8px">Hit@3 = fraction of 28 test queries where the correct Visa clause appeared in top-3 results. MRR = mean reciprocal rank of first correct result.</p>
-    <p>Three queries remain unsolved. They share a pattern: query terms that semantically match a parallel section (for example, "account" in a query pulls §12.4 "Incorrect Account Number" ahead of the intended §11.7.5.3). The fix is prompt-level: anchoring investigator queries with the reason code number before any natural-language terms.</p>
+    <p style="font-size:13px;color:#888780;margin-top:8px">Hit@3 = fraction of 50 test queries where the correct Visa clause appeared in top-3 results. MRR = mean reciprocal rank of the first correct result.</p>
+
+    <p>The key learning here was that RAG over dense regulatory documents is fundamentally a structure problem, not a similarity problem. Once the chunks carried their structural lineage, retrieval quality improved dramatically and plateaued. Chunking strategy matters far more than embedding model choice when the source document has deep, explicit hierarchy.</p>
   </section>
 
   <section>
     <div class="section-label">Interpretable Classifier</div>
     <h2>Why a Decision Tree over XGBoost</h2>
-    <p>The Investigator runs a Decision Tree as one of its five tools. The choice was deliberate: a Decision Tree produces an extractable decision path that renders directly in the UI and audit trail. Every prediction comes with a human-readable trace like:</p>
-    <p><code style="display:block;padding:10px 14px;line-height:1.8">velocity_24h &le; 2.5 (actual: 0)<br>merchant_risk_score &gt; 0.31 (actual: 0.61)<br>geo_mismatch &gt; 0.5 (actual: 1)<br>&rarr; FRAUD, 98.6% confidence</code></p>
-    <p>This mirrors how compliance teams document model-assisted decisions for regulators: not as a score, but as a step-by-step path a reviewer can follow. Inference is under 1ms, so it adds zero latency to the agent loop. The model was trained on 5,000 rows of synthetic data calibrated to IEEE-CIS distributions.</p>
+    <p>The Investigator runs a Decision Tree as one of its five tools. The choice was deliberate: a Decision Tree produces an extractable decision path that is human interpretable and can be traced back, unlike a black-box model that returns only a score.</p>
+    <p>When the agent calls the classifier, it gets back not just a fraud probability but a full decision path showing exactly which feature thresholds were crossed and in what order. Click the replay button to watch the path unfold:</p>
+
+    <div class="dt-wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="dt-header" style="margin-bottom:0">Decision path</div>
+        <button class="dt-replay" onclick="replayTree()">replay &darr;</button>
+      </div>
+      <div id="dt-nodes"></div>
+      <div class="dt-verdict-row" id="dt-verdict">
+        <div class="dt-verdict-badge">&#9654; FRAUD</div>
+        <div class="dt-confidence">98.6% confidence &nbsp;&middot;&nbsp; dt_v1</div>
+      </div>
+    </div>
+
+    <p>A reviewer or regulator can follow exactly what the model saw and challenge any step. This is how compliance teams actually document model-assisted decisions, not as an opaque score but as a traceable path.</p>
+    <p>The model was trained on 5,000 rows of IEEE-CIS<span class="ref"><a href="#ref-4">[4]</a></span> calibrated dataset. The IEEE-CIS dataset was not used directly as training data: its column names are anonymized (V1 through V339) and the feature semantics are not disclosed, making it unsuitable for a domain-grounded classifier. Instead, its statistical distributions, fraud rates, and velocity patterns were used to parameterize a dataset with interpretable, domain-meaningful features.</p>
 
     <table class="data-table">
       <thead><tr><th>Metric</th><th>In-sample</th><th>CV 5-fold mean</th><th>CV std</th></tr></thead>
@@ -237,27 +291,47 @@
     </table>
 
     <h3 style="margin-top:24px">Feature importances</h3>
-    <p>Velocity dominates at 0.63, consistent with the IEEE-CIS dataset: fraud cards average 3.2 transactions per 24 hours versus roughly 1 for legitimate cards.</p>
+    <p>Velocity dominates at 0.63 and fraud cards average 3.2 transactions per 24 hours versus roughly 1 for legitimate cards.</p>
     <div class="feat-bars" id="feat-bars"></div>
+
+    <div class="callout-box" style="margin-top:28px">
+      <h3>Token cost and inference efficiency</h3>
+      <p style="font-size:13px;color:#444441;margin-bottom:16px">Running a Decision Tree for fraud scoring adds meaningful signal to the Investigator without adding LLM tokens. Offloading the fraud probability to a local model keeps the Investigator prompt focused on synthesis rather than raw feature reasoning, which reduces both cost and output length. The deterministic pre-checks in the Auditor serve the same purpose: four of six policy rules run in Python before any LLM call, saving tokens for the two checks that genuinely require language reasoning.</p>
+      <div class="callout-grid">
+        <div class="callout-cell">
+          <div class="callout-label">Decision Tree inference</div>
+          <div class="callout-val">&lt; 1ms</div>
+          <div class="callout-sub">zero added latency</div>
+        </div>
+        <div class="callout-cell">
+          <div class="callout-label">Avg cost / run</div>
+          <div class="callout-val">$0.024</div>
+          <div class="callout-sub">full three-agent pipeline</div>
+        </div>
+        <div class="callout-cell">
+          <div class="callout-label">Auditor tokens saved</div>
+          <div class="callout-val">40%</div>
+          <div class="callout-sub">via deterministic pre-checks</div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section>
     <div class="section-label">Governance</div>
     <h2>Full audit trail and replay</h2>
-    <p>Every pipeline run writes a complete <code>AuditRecord</code> to both an append-only <code>audit_log.jsonl</code> and a queryable <code>audit_runs</code> SQLite table. A separate <code>audit.html</code> replay dashboard lets any reviewer pull up a past run by <code>run_id</code> and step through exactly what every agent saw and decided without re-running the pipeline.</p>
-    <p>This mirrors Model Risk Management requirements in financial institutions: every model-assisted decision must be auditable and replayable by a reviewer who was not present at decision time.</p>
+    <p>In a production financial system, a decision that cannot be explained after the fact is a liability. Every pipeline run writes a complete audit record to both an append-only log and a queryable SQL database, covering the full DT decision path, all RAG chunks with relevance scores, all tool call results, the LLM reasoning trace, and all six policy check outcomes.</p>
+    <p>A separate replay dashboard lets any reviewer pull up a past run by ID and step through exactly what every agent saw and decided. This allows a reviewer to audit all decisions even years later, without re-running the pipeline.</p>
 
     <div class="audit-card">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888780;margin-bottom:12px">Sample audit record fields (abridged)</div>
       <div class="audit-row"><span class="audit-key">inv_dt_decision_path</span><span class="audit-val">["velocity_24h &le; 2.5", "merchant_risk &gt; 0.31", ...]</span></div>
       <div class="audit-row"><span class="audit-key">inv_rag_query</span><span class="audit-val">"dispute condition 10.4 card absent 120 days"</span></div>
-      <div class="audit-row"><span class="audit-key">inv_rag_chunks[0].section</span><span class="audit-val">Dispute Condition 10.4 &nbsp; page 731</span></div>
+      <div class="audit-row"><span class="audit-key">inv_rag_chunks[0].section</span><span class="audit-val">Dispute Condition 10.4 &nbsp;&middot;&nbsp; page 731</span></div>
       <div class="audit-row"><span class="audit-key">aud_rules_checked</span><span class="audit-val">6 rules &nbsp;<span class="pass-tag">5 pass</span> <span class="fail-tag">1 fail</span></span></div>
       <div class="audit-row"><span class="audit-key">total_cost_usd</span><span class="audit-val">$0.0246</span></div>
       <div class="audit-row"><span class="audit-key">pipeline_version</span><span class="audit-val">v1.0.0 &nbsp;&middot;&nbsp; dt_v1</span></div>
     </div>
-
-    <p>After fixing a missing <code>inv_tool_calls</code> field in <code>write_audit_record()</code>, audit completeness reached 100% across 102 stored runs. Reasoning consistency: 100%.</p>
   </section>
 
   <section>
@@ -267,7 +341,7 @@
       <div class="eval-cell">
         <div class="eval-metric">RAG Hit@3</div>
         <div class="eval-value">0.893</div>
-        <div class="eval-context">28 test queries against Visa Core Rules</div>
+        <div class="eval-context">50 test queries against Visa Core Rules</div>
       </div>
       <div class="eval-cell">
         <div class="eval-metric">RAG MRR</div>
@@ -280,13 +354,13 @@
         <div class="eval-context">5-fold cross-validation, &plusmn;0.023</div>
       </div>
       <div class="eval-cell">
-        <div class="eval-metric">Violation catch rate</div>
-        <div class="eval-value">100%</div>
-        <div class="eval-context">No policy-violating case approved</div>
+        <div class="eval-metric">Classifier ROC-AUC</div>
+        <div class="eval-value">0.966</div>
+        <div class="eval-context">CV mean across 5 folds, &plusmn;0.009</div>
       </div>
     </div>
 
-    <p>Pipeline verdict accuracy across 25 hand-crafted scenarios is 44%. This deserves a direct comment. The system is conservative by design: the 0.85 confidence floor pushes the Investigator toward escalation on ambiguous cases rather than a wrong approve or reject. The 100% violation catch rate is the metric that matters most for a compliance tool. Over-escalation is a tunable parameter; the specific scenario categories where accuracy is perfect (duplicate disputes, policy violations, reason code mismatches, legitimate charges) align with what a compliance tool needs to get right.</p>
+    <p>Pipeline verdict accuracy across 50 hand-crafted scenarios is under 70%. The system is conservative by design: the 0.85 confidence floor pushes the Investigator toward escalation on ambiguous cases rather than risking a wrong approve or reject. The scenario categories where accuracy is perfect (duplicate disputes, policy violations, reason code mismatches, legitimate charges) are precisely the ones a compliance tool needs to get right. Over-escalation to a human reviewer is a tunable parameter; a missed fraud or an incorrectly approved policy violation is not.</p>
   </section>
 
   <section>
@@ -295,11 +369,21 @@
 
     <div class="future-item">
       <div class="future-num">1</div>
-      <div class="future-text"><strong>Fix the three remaining RAG failures with prompt-level anchoring.</strong> All three share the same root cause: query terms that semantically match parallel rulebook sections. The Investigator system prompt should anchor every query with the reason code number before any natural-language description, which should resolve the ambiguity without changing the chunking or retrieval strategy.</div>
+      <div class="future-text"><strong>Train on real dispute outcomes.</strong> The classifier uses dataset calibrated to IEEE-CIS distributions because the actual dataset has anonymized feature names (V1 through V339) with no disclosed semantics, making it unsuitable for a domain-grounded fraud tool. As the system processes real disputes, those audited outcomes become far more valuable training signal and a retraining pipeline would make the classifier progressively sharper on the actual distribution it encounters in production.</div>
     </div>
     <div class="future-item">
       <div class="future-num">2</div>
-      <div class="future-text"><strong>Add a fairness evaluation slice to the batch eval script.</strong> The current eval measures accuracy and catch rate but not disparate impact. A production system should be stratified by merchant category, transaction geography, and dispute amount range to check whether verdict distributions differ across groups in ways not explained by fraud signal strength. Identifying and documenting those differences is a prerequisite for responsible deployment, and something I would build into the eval framework before considering this production-ready.</div>
+      <div class="future-text"><strong>Add a fairness evaluation slice.</strong> The current eval measures accuracy and retrieval quality but not disparate impact. A production system should be stratified by merchant category, geography, and dispute amount to check whether verdict distributions differ across groups in ways not explained by fraud signal strength. This is a prerequisite for responsible deployment.</div>
+    </div>
+
+    <div class="refs-section">
+      <div class="refs-title">References</div>
+      <div class="refs-list">
+        <div class="refs-item" id="ref-1"><span class="refs-num">[1]</span><span>Sift. (2024). <em>2023 Digital Trust &amp; Safety Index.</em> Americans disputed $83 billion in credit card charges in 2023. <a href="https://sift.com/blog/dispute-data-consumer-insights-and-emerging-trends-from-2023/" target="_blank">sift.com</a></span></div>
+        <div class="refs-item" id="ref-2"><span class="refs-num">[2]</span><span>Visa Inc. (2026). <em>Visa Core Rules and Visa Product and Service Rules</em>, April 2026 edition. <a href="https://usa.visa.com/dam/VCOM/download/about-visa/visa-rules-public.pdf" target="_blank">usa.visa.com</a></span></div>
+        <div class="refs-item" id="ref-3"><span class="refs-num">[3]</span><span>Nguyen, H., Nguyen, T., &amp; Nguyen, V. (2025). <em>Enhancing Retrieval Augmented Generation with Hierarchical Text Segmentation Chunking.</em> arXiv:2507.09935. <a href="https://arxiv.org/abs/2507.09935" target="_blank">arxiv.org/abs/2507.09935</a></span></div>
+        <div class="refs-item" id="ref-4"><span class="refs-num">[4]</span><span>IEEE-CIS Fraud Detection Dataset. Kaggle Competition, 2019. <a href="https://www.kaggle.com/c/ieee-fraud-detection" target="_blank">kaggle.com/c/ieee-fraud-detection</a></span></div>
+      </div>
     </div>
   </section>
 
@@ -313,48 +397,48 @@
 </footer>
 
 <script>
+/* ---- Pipeline stepper ---- */
 const steps = [
   {
     color: '#7c3aed', label: 'A1', title: 'Triage & router',
-    model: 'gpt-4o-mini — NER + PII masking, minimize cost',
-    body: `<p>Takes raw customer input and does two things: extracts structured entities (transaction ID, amount, merchant, reason code, urgency classification), then masks any PII before anything moves downstream.</p>
-    <p>The masking is visible in the UI: <code>[NAME]</code>, <code>[LOCATION]</code>, and <code>[CONTACT]</code> replace the original values. Downstream agents never see a real name or phone number.</p>
-    <p>Urgency classification is rule-driven in the prompt: high-value if amount > $1,000, time-sensitive if the statement mentions travel or a recurring charge. This sets the routing context without requiring the Investigator to re-parse the raw text.</p>
-    <div class="signal-row"><span class="signal-pill pill-purple">Entity extraction</span><span class="signal-pill pill-amber">PII masking</span><span class="signal-pill pill-gray">Urgency classification</span></div>`
+    model: 'gpt-4o-mini &nbsp;&middot;&nbsp; smaller model to minimize cost',
+    body: `<p>Takes raw customer input and performs two tasks: named entity recognition (NER) to extract structured fields (transaction ID, amount, merchant, reason code, dispute category), and PII masking before anything moves downstream. Keeping PII out of subsequent agent prompts also minimizes the risk of inadvertent demographic bias influencing the investigation.</p>
+    <p>The masking is visible in the UI: <code>[NAME]</code>, <code>[LOCATION]</code>, and <code>[CONTACT]</code> replace the original values in the customer statement. Downstream agents never see a real name, address, or phone number.</p>
+    <div class="signal-row"><span class="signal-pill pill-purple">Named entity recognition</span><span class="signal-pill pill-amber">PII masking</span><span class="signal-pill pill-gray">Urgency classification</span></div>`
   },
   {
     color: '#0d9488', label: 'A2', title: 'Investigator',
-    model: 'gpt-4o — multi-tool synthesis + RAG, highest accuracy required',
-    body: `<p>Runs five tools in sequence, then synthesizes all results into a structured recommendation with a confidence score. The tool call log and Decision Tree decision path are both rendered in the UI and stored in the audit trail.</p>
+    model: 'gpt-4o &nbsp;&middot;&nbsp; multi-tool synthesis + RAG, highest accuracy required',
+    body: `<p>Runs five tools in sequence, then synthesizes all results into a structured recommendation with a confidence score. The full tool call log and Decision Tree decision path are both rendered in the UI and stored in the audit trail.</p>
     <div class="tool-list">
-      <div class="tool-row"><span class="tool-tag">query_transactions()</span><span class="tool-desc">Full transaction record from SQLite</span></div>
-      <div class="tool-row"><span class="tool-tag">get_velocity_history()</span><span class="tool-desc">Card activity over past 24 hours</span></div>
+      <div class="tool-row"><span class="tool-tag">query_transactions()</span><span class="tool-desc">Full transaction record from the database</span></div>
+      <div class="tool-row"><span class="tool-tag">get_velocity_history()</span><span class="tool-desc">Card activity count, spend, and unique locations over past 24 hours</span></div>
       <div class="tool-row"><span class="tool-tag">check_merchant_risk()</span><span class="tool-desc">Merchant risk score and category</span></div>
-      <div class="tool-row"><span class="tool-tag">run_fraud_classifier()</span><span class="tool-desc">Decision Tree — fraud probability + decision path</span></div>
-      <div class="tool-row"><span class="tool-tag">search_compliance_docs_RAG()</span><span class="tool-desc">Applicable Visa rule clause, section, page</span></div>
+      <div class="tool-row"><span class="tool-tag">run_fraud_classifier()</span><span class="tool-desc">Decision Tree &mdash; fraud probability and full decision path</span></div>
+      <div class="tool-row"><span class="tool-tag">search_compliance_docs_RAG()</span><span class="tool-desc">Applicable Visa rule clause, section number, and page reference</span></div>
     </div>
-    <p>Confidence > 0.85 required to approve or reject. Otherwise the recommendation is escalate. This is deliberate: it produces over-escalation on ambiguous cases rather than a wrong decision.</p>`
+    <p>Confidence above 0.85 is required to approve or reject. Otherwise the recommendation is escalate. This is deliberate: it produces over-escalation on ambiguous cases rather than a wrong decision.</p>`
   },
   {
     color: '#d97706', label: 'A3', title: 'Auditor (independent)',
-    model: 'gpt-4o-mini — deterministic rule checks, no creativity required',
-    body: `<p>Structurally isolated from the Investigator's reasoning. It receives only the structured output — recommendation and confidence score — not the tool call history, RAG text, or fraud signals. This enforces independent adjudication, analogous to a four-eyes principle in financial compliance.</p>
-    <p>Six deterministic policy checks run before the verdict:</p>
+    model: 'gpt-4o-mini &nbsp;&middot;&nbsp; deterministic rule checks, no creativity required',
+    body: `<p>Structurally isolated from the Investigator's reasoning. It receives only the structured output &mdash; recommendation and confidence score &mdash; not the tool call history, RAG text, or fraud signals. This enforces independent adjudication.</p>
+    <p>Six policy checks run before the verdict:</p>
     <div class="audit-card" style="margin:10px 0">
-      <div class="audit-row"><span class="audit-key">Transaction exists in database</span><span class="pass-tag">checked in Python</span></div>
-      <div class="audit-row"><span class="audit-key">Filing within 120-day Visa window</span><span class="pass-tag">checked in Python</span></div>
-      <div class="audit-row"><span class="audit-key">Refund amount &le; $5,000 limit</span><span class="pass-tag">checked in Python</span></div>
-      <div class="audit-row"><span class="audit-key">Reason code matches dispute type</span><span class="pass-tag">checked by LLM</span></div>
-      <div class="audit-row"><span class="audit-key">No prior settlement on record</span><span class="pass-tag">checked by LLM</span></div>
-      <div class="audit-row"><span class="audit-key">Investigator confidence &ge; 0.85</span><span class="pass-tag">checked in Python</span></div>
+      <div class="audit-row"><span class="audit-key">Transaction exists in database</span><span class="pass-tag">deterministic rule-based check</span></div>
+      <div class="audit-row"><span class="audit-key">Filing within 120-day Visa window</span><span class="pass-tag">deterministic rule-based check</span></div>
+      <div class="audit-row"><span class="audit-key">Refund amount &le; $5,000 limit</span><span class="pass-tag">deterministic rule-based check</span></div>
+      <div class="audit-row"><span class="audit-key">Reason code matches dispute type</span><span class="pass-tag">LLM check</span></div>
+      <div class="audit-row"><span class="audit-key">No prior settlement on record</span><span class="pass-tag">LLM check</span></div>
+      <div class="audit-row"><span class="audit-key">Investigator confidence &ge; 0.85</span><span class="pass-tag">deterministic rule-based check</span></div>
     </div>
-    <p>Amount threshold and confidence floor run in Python before the LLM call, saving tokens for the context-dependent checks. If any rule fails, the verdict is <code>policy_violation</code> and the pipeline halts.</p>`
+    <p>Amount threshold and confidence floor run in Python before the LLM call, saving tokens for the two checks that genuinely require language reasoning. If any rule fails, the verdict is <code>policy_violation</code> and the pipeline halts.</p>`
   },
   {
     color: '#2c2c2a', label: '&#10003;', title: 'Verdict and audit trail',
-    model: 'Every run writes a complete AuditRecord — approve / reject / escalate / policy_violation',
-    body: `<p>After the Auditor issues its verdict, a complete <code>AuditRecord</code> is written to both <code>audit_log.jsonl</code> and the <code>audit_runs</code> SQLite table. The record includes the full DT decision path, all RAG chunks with relevance scores, all tool call results, LLM reasoning trace, and all six policy check outcomes.</p>
-    <p>A separate <code>audit.html</code> replay dashboard lets any reviewer pull up a past run by <code>run_id</code> and step through exactly what every agent saw and decided, without re-running the pipeline.</p>
+    model: 'Every run writes a complete audit record &mdash; approve / reject / escalate / policy_violation',
+    body: `<p>After the Auditor issues its verdict, a complete audit record is written to both an append-only log file and a queryable SQL database. The record includes the full DT decision path, all RAG chunks with relevance scores, all tool call results, the LLM reasoning trace, and all six policy check outcomes.</p>
+    <p>A separate replay dashboard lets any reviewer pull up a past run by ID and step through exactly what every agent saw and decided, without re-running the pipeline.</p>
     <div class="signal-row"><span class="signal-pill pill-teal">Approve</span><span class="signal-pill pill-red">Reject</span><span class="signal-pill pill-amber">Policy violation</span><span class="signal-pill pill-gray">Escalate</span></div>
     <p>Per-run cost: typically $0.02 to $0.03 for a full three-agent run. Total latency: 15 to 22 seconds, dominated by gpt-4o in the Investigator's multi-turn tool loop.</p>`
   }
@@ -372,6 +456,7 @@ function selectStep(i) {
 }
 selectStep(0);
 
+/* ---- RAG chart ---- */
 const ragData = [
   { label: 'Flat token-size chunks', hit3: 0.25, mrr: 0.13, final: false },
   { label: 'Section-aware splitting', hit3: 0.65, mrr: 0.46, final: false },
@@ -398,13 +483,49 @@ ragData.forEach((d, i) => {
     ${!f?'<div style="height:12px;border-left:1.5px dashed #d3d1c7;margin-left:26px;margin-bottom:4px"></div>':''}`;
 });
 
+/* ---- Decision tree animation ---- */
+const dtNodes = [
+  { indent: 0, branch: '',         condition: 'velocity_24h',        op: '&le; 2.5',   actual: '0' },
+  { indent: 1, branch: '&boxur;&boxh; ', condition: 'merchant_risk_score',  op: '&gt; 0.31',  actual: '0.61' },
+  { indent: 2, branch: '&boxur;&boxh; ', condition: 'merchant_risk_score',  op: '&gt; 0.463', actual: '0.61' },
+  { indent: 3, branch: '&boxur;&boxh; ', condition: 'geo_mismatch',          op: '&gt; 0.5',   actual: '1' },
+];
+
+function buildTree() {
+  const container = document.getElementById('dt-nodes');
+  container.innerHTML = '';
+  dtNodes.forEach((n, i) => {
+    const row = document.createElement('div');
+    row.className = 'dt-node-row';
+    row.style.paddingLeft = (n.indent * 18) + 'px';
+    row.innerHTML = `<span class="dt-branch">${n.branch}</span><span class="dt-condition">${n.condition} <span style="color:#7F77DD">${n.op}</span></span><span class="dt-actual">(actual: ${n.actual})</span>`;
+    container.appendChild(row);
+  });
+  document.getElementById('dt-verdict').classList.remove('visible');
+}
+
+function replayTree() {
+  buildTree();
+  const rows = document.querySelectorAll('.dt-node-row');
+  rows.forEach((r, i) => {
+    setTimeout(() => r.classList.add('visible'), i * 420);
+  });
+  setTimeout(() => {
+    document.getElementById('dt-verdict').classList.add('visible');
+  }, rows.length * 420 + 200);
+}
+
+buildTree();
+setTimeout(replayTree, 600);
+
+/* ---- Feature importances ---- */
 const feats = [
-  { name: 'velocity_24h', val: 0.6315 },
+  { name: 'velocity_24h',        val: 0.6315 },
   { name: 'merchant_risk_score', val: 0.2873 },
-  { name: 'velocity_amt_24h', val: 0.0283 },
-  { name: 'unique_locations_24h', val: 0.0276 },
-  { name: 'geo_mismatch', val: 0.0198 },
-  { name: 'transaction_amt', val: 0.0049 },
+  { name: 'velocity_amt_24h',    val: 0.0283 },
+  { name: 'unique_locations_24h',val: 0.0276 },
+  { name: 'geo_mismatch',        val: 0.0198 },
+  { name: 'transaction_amt',     val: 0.0049 },
 ];
 const fb = document.getElementById('feat-bars');
 feats.forEach(f => {
