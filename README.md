@@ -1,6 +1,6 @@
 # Agentic Fraud Detection System with LangGraph and RAG
 
-A three-agent pipeline that resolves credit card disputes end-to-end — from raw claim text to a compliance-grounded decision — with full audit logging and a live streaming UI.
+A three-agent LangGraph pipeline that resolves credit card disputes end-to-end. A raw dispute claim enters Agent 1, which fetches transaction records, masks PII, and extracts structured entities. Agent 2 runs four parallel checks, a Decision Tree fraud classifier on the transaction, velocity and risk signals pulled from disparate data sources, and a RAG retrieval over the Visa Core Rules to surface the exact policy clause governing the claim. Agent 3 applies deterministic compliance checks (example, 120-day dispute window) and issues a final decision, halting the pipeline if a rule is violated.
 
 ---
 
@@ -18,20 +18,18 @@ A dispute flows through three specialized agents orchestrated by LangGraph:
 |---|---|---|
 | Triage | `gpt-4o-mini` | Extracts entities, masks PII, classifies dispute type |
 | Investigator | `gpt-4o` | Queries transaction DB, runs fraud classifier, retrieves Visa policy via RAG |
-| Auditor | `gpt-4o-mini` | Checks compliance rules, issues final decision, halts on policy violation |
+| Auditor | `gpt-4o-mini` | Checks compliance rules, issues final decision (Reject/Allow claim, Escalate to human, Policy Violation) |
 
-Each agent receives only the prior agent's structured output — no chain-of-thought leakage across boundaries.
 
 ---
 
 ## Key features
 
-- **RAG over Visa Core Rules** — ChromaDB retrieval grounded in the real Visa rulebook (April 2026 edition), with source section + page returned alongside each chunk
-- **Decision Tree fraud classifier** — trained on IEEE-CIS calibrated synthetic data, decision path visible in UI
-- **Policy guardrails** — Auditor halts and logs violation type if compliance rules are breached
-- **Full audit trail** — every run writes a structured `AuditRecord` to `audit_log.jsonl` and a SQLite `audit_runs` table
-- **Streaming UI** — SSE events push per-agent latency, token usage, and cost to the frontend in real time
-- **Audit replay panel** — `audit.html` replays any stored run showing DT path, RAG chunks, LLM reasoning, and policy checks
+- **RAG over Visa Core Rules:** ChromaDB retrieval grounded in the real Visa rulebook (April 2026 edition), with source section + page returned alongside each chunk
+- **Decision Tree fraud classifier:** Trained on IEEE-CIS calibrated data, decision path visible in UI
+- **Policy guardrails:** Auditor halts and logs violation type if compliance rules are breached
+- **Full audit trail:** Rvery run writes a structured `AuditRecord` to `audit_log.jsonl` as part of Governance layer
+- **Streaming UI:** SSE events push per-agent latency, token usage, and cost to the frontend in real time
 
 ---
 
@@ -45,8 +43,6 @@ Each agent receives only the prior agent's structured output — no chain-of-tho
 
 ```bash
 pip install -r requirements.txt
-
-cp .env.example .env          # add OPENAI_API_KEY
 
 python backend/data/seed_demo_data.py      # seed 25 demo disputes
 python backend/data/ingest_ieee.py         # load IEEE-CIS transactions (eval only)
