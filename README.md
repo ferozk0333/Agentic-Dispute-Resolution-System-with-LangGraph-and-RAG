@@ -6,7 +6,13 @@ A three-agent LangGraph pipeline that resolves credit card disputes end-to-end. 
 
 ## Demo
 
-> 📹 *(video)*
+
+
+https://github.com/user-attachments/assets/7d96d707-19dd-4c84-9444-b5aa513d726e
+
+
+
+
 
 ---
 
