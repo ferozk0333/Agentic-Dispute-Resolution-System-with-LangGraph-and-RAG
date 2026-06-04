@@ -1,1 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Agent Dispute Resolution — Feroz Khan</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f6f2; color: #1a1a18; line-height: 1.7; font-size: 16px; }
+    .page { max-width: 760px; margin: 0 auto; padding: 0 24px 80px; }
+    .site-header { border-bottom: 0.5px solid #d3d1c7; padding: 20px 0 18px; margin-bottom: 56px; }
+    .header-inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; }
+    .author-tag { font-size: 13px; color: #5f5e5a; }
+    .author-tag strong { color: #1a1a18; font-weight: 500; }
+    .header-links { display: flex; gap: 16px; }
+    .header-links a { font-size: 13px; color: #5f5e5a; text-decoration: none; }
+    .header-links a:hover { color: #1a1a18; }
+    .hero { margin-bottom: 64px; }
+    .hero-eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #5f5e5a; margin-bottom: 14px; }
+    .hero h1 { font-size: 32px; font-weight: 500; line-height: 1.25; margin-bottom: 18px; color: #1a1a18; }
+    .hero-lead { font-size: 17px; color: #444441; line-height: 1.7; max-width: 620px; }
+    .stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #d3d1c7; border: 0.5px solid #d3d1c7; border-radius: 10px; overflow: hidden; margin: 40px 0 64px; }
+    .stat-cell { background: #f7f6f2; padding: 20px 22px; }
+    .stat-num { font-size: 28px; font-weight: 500; color: #3C3489; font-variant-numeric: tabular-nums; }
+    .stat-label { font-size: 12px; color: #888780; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+    section { margin-bottom: 56px; }
+    .section-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 0.5px solid #d3d1c7; }
+    h2 { font-size: 22px; font-weight: 500; margin-bottom: 14px; color: #1a1a18; }
+    h3 { font-size: 17px; font-weight: 500; margin-bottom: 10px; color: #1a1a18; }
+    p { margin-bottom: 14px; color: #444441; }
+    p:last-child { margin-bottom: 0; }
+    code { font-family: 'SF Mono', Menlo, monospace; font-size: 13px; padding: 1px 5px; border-radius: 4px; color: #3C3489; background: #EEEDFE; }
+    .pipeline-wrap { margin: 28px 0 0; }
+    .pipeline-steps { display: flex; align-items: stretch; gap: 0; }
+    .step-btn { flex: 1; border: none; background: none; cursor: pointer; padding: 0; }
+    .step-inner { border: 0.5px solid #d3d1c7; border-right: none; padding: 14px 12px; text-align: center; background: #f0efe9; transition: background 0.15s; height: 100%; }
+    .step-btn:last-child .step-inner { border-right: 0.5px solid #d3d1c7; border-radius: 0 8px 8px 0; }
+    .step-btn:first-child .step-inner { border-radius: 8px 0 0 8px; }
+    .step-btn.active .step-inner { background: #fff; }
+    .step-btn:hover .step-inner { background: #f7f6f0; }
+    .step-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; margin: 0 auto 6px; color: #fff; }
+    .step-name { font-size: 11px; font-weight: 500; color: #2c2c2a; }
+    .step-sub { font-size: 10px; color: #888780; margin-top: 2px; }
+    .step-arrow { display: flex; align-items: center; color: #b4b2a9; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+    .step-detail { border: 0.5px solid #d3d1c7; border-top: none; border-radius: 0 0 10px 10px; background: #fff; padding: 24px; }
+    .detail-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+    .detail-badge { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #fff; flex-shrink: 0; }
+    .detail-title { font-size: 16px; font-weight: 500; color: #1a1a18; }
+    .detail-model { font-size: 12px; color: #888780; margin-top: 2px; }
+    .detail-body { font-size: 14px; color: #444441; line-height: 1.65; }
+    .detail-body p { margin-bottom: 10px; font-size: 14px; }
+    .detail-body p:last-child { margin-bottom: 0; }
+    .tool-list { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+    .tool-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .tool-tag { background: #EEEDFE; color: #3C3489; padding: 3px 8px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 11px; white-space: nowrap; }
+    .tool-desc { color: #5f5e5a; }
+    .signal-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .signal-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; }
+    .pill-purple { background: #EEEDFE; color: #3C3489; }
+    .pill-teal { background: #E1F5EE; color: #0F6E56; }
+    .pill-amber { background: #FAEEDA; color: #854F0B; }
+    .pill-red { background: #FCEBEB; color: #A32D2D; }
+    .pill-gray { background: #F1EFE8; color: #5F5E5A; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+    .data-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #888780; font-weight: 500; padding: 8px 12px; text-align: left; border-bottom: 0.5px solid #d3d1c7; }
+    .data-table td { padding: 10px 12px; border-bottom: 0.5px solid #f1efe8; color: #444441; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .num { font-variant-numeric: tabular-nums; font-family: 'SF Mono', monospace; font-size: 13px; }
+    .hl { color: #3C3489; font-weight: 500; }
+    .muted { color: #888780; }
+    .rag-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .rag-bar-wrap { flex: 1; height: 8px; background: #f1efe8; border-radius: 4px; overflow: hidden; }
+    .rag-bar { height: 100%; border-radius: 4px; }
+    .rag-val { width: 36px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: #3C3489; font-weight: 500; flex-shrink: 0; }
+    .feat-bars { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+    .feat-row { display: flex; align-items: center; gap: 10px; }
+    .feat-name { width: 180px; font-family: 'SF Mono', monospace; font-size: 11px; color: #5f5e5a; flex-shrink: 0; }
+    .feat-bar-wrap { flex: 1; height: 6px; background: #f1efe8; border-radius: 3px; }
+    .feat-bar { height: 100%; border-radius: 3px; background: #7F77DD; }
+    .feat-val { width: 40px; text-align: right; font-size: 11px; font-family: 'SF Mono', monospace; color: #888780; flex-shrink: 0; }
+    .audit-card { background: #f7f6f2; border: 0.5px solid #d3d1c7; border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
+    .audit-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #ede; font-size: 13px; }
+    .audit-row:last-child { border-bottom: none; }
+    .audit-key { color: #5f5e5a; font-family: 'SF Mono', monospace; font-size: 12px; }
+    .audit-val { font-family: 'SF Mono', monospace; color: #1a1a18; font-size: 12px; text-align: right; }
+    .pass-tag { color: #0F6E56; font-size: 11px; background: #E1F5EE; padding: 2px 8px; border-radius: 4px; }
+    .fail-tag { color: #A32D2D; font-size: 11px; background: #FCEBEB; padding: 2px 8px; border-radius: 4px; }
+    .eval-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+    .eval-cell { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 16px 18px; }
+    .eval-metric { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #888780; margin-bottom: 6px; }
+    .eval-value { font-size: 22px; font-weight: 500; color: #3C3489; font-variant-numeric: tabular-nums; }
+    .eval-context { font-size: 11px; color: #888780; margin-top: 4px; }
+    .future-item { display: flex; gap: 14px; margin-bottom: 20px; }
+    .future-num { width: 24px; height: 24px; border-radius: 50%; background: #EEEDFE; color: #3C3489; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+    .future-text { font-size: 14px; color: #444441; line-height: 1.65; }
+    .future-text strong { color: #1a1a18; font-weight: 500; }
+    .stack-row { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 0.5px solid #f1efe8; font-size: 14px; }
+    .stack-row:last-child { border-bottom: none; }
+    .stack-layer { width: 140px; color: #888780; font-size: 12px; flex-shrink: 0; }
+    .stack-choice { color: #1a1a18; font-weight: 500; font-size: 13px; }
+    .stack-note { color: #888780; font-size: 12px; font-weight: 400; }
+    .site-footer { border-top: 0.5px solid #d3d1c7; padding: 28px 24px; max-width: 760px; margin: 0 auto; }
+    .footer-inner { display: flex; justify-content: space-between; align-items: center; }
+    .footer-left { font-size: 13px; color: #888780; }
+    .footer-right a { font-size: 13px; color: #3C3489; text-decoration: none; }
 
+    /* Demo GIF placeholder — swap src for your actual GIF */
+    .demo-wrap { margin: 28px 0; border: 0.5px solid #d3d1c7; border-radius: 10px; overflow: hidden; background: #f0efe9; }
+    .demo-wrap img { width: 100%; display: block; }
+    .demo-caption { font-size: 12px; color: #888780; padding: 10px 14px; border-top: 0.5px solid #d3d1c7; }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <span class="author-tag"><strong>Feroz Khan</strong> &nbsp;·&nbsp; ML Engineer, Seattle</span>
+    <div class="header-links">
+      <a href="https://github.com/YOUR_USERNAME/dispute-agent" target="_blank">GitHub ↗</a>
+      <a href="https://linkedin.com/in/YOUR_PROFILE" target="_blank">LinkedIn ↗</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+
+  <div class="hero">
+    <div class="hero-eyebrow">Project write-up &nbsp;·&nbsp; June 2026</div>
+    <h1>A three-agent pipeline for credit card dispute resolution, grounded in real fraud data and real compliance rules</h1>
+    <p class="hero-lead">Most dispute resolution is still manual: an analyst reads a customer statement, checks a transaction record, looks up the applicable rule in a 900-page rulebook, and makes a judgment call. This project automates that pipeline with three LLM agents orchestrated by LangGraph, a Decision Tree classifier that shows its work, a RAG layer grounded in the actual Visa Core Rules, and a governance trail that logs every run.</p>
+  </div>
+
+  <!-- DEMO GIF — drop your GIF path here -->
+  <div class="demo-wrap">
+    <img src="demo.gif" alt="Screen recording of a dispute running through the three-agent pipeline">
+    <div class="demo-caption">Full pipeline run: input → triage → investigation with tool calls and DT decision path → auditor policy checks → verdict with per-agent cost breakdown</div>
+  </div>
+
+  <div class="stat-strip" style="margin-top:48px">
+    <div class="stat-cell">
+      <div class="stat-num">0.893</div>
+      <div class="stat-label">RAG Hit@3 (final)</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">0.853</div>
+      <div class="stat-label">Classifier CV F1</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">Violation catch rate</div>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-label">Architecture</div>
+    <h2>How the pipeline works</h2>
+    <p>Three agents run sequentially inside a LangGraph <code>StateGraph</code>. Each writes structured output to shared state; the next agent reads only what it is explicitly passed. Click each stage to explore what it does.</p>
+
+    <div class="pipeline-wrap">
+      <div class="pipeline-steps" id="pipeline-steps">
+        <button class="step-btn active" data-step="0" onclick="selectStep(0)">
+          <div class="step-inner">
+            <div class="step-icon" style="background:#7c3aed">A1</div>
+            <div class="step-name">Triage</div>
+            <div class="step-sub">Entity extraction</div>
+          </div>
+        </button>
+        <div class="step-arrow">&rarr;</div>
+        <button class="step-btn" data-step="1" onclick="selectStep(1)">
+          <div class="step-inner">
+            <div class="step-icon" style="background:#0d9488">A2</div>
+            <div class="step-name">Investigator</div>
+            <div class="step-sub">Tools + RAG</div>
+          </div>
+        </button>
+        <div class="step-arrow">&rarr;</div>
+        <button class="step-btn" data-step="2" onclick="selectStep(2)">
+          <div class="step-inner">
+            <div class="step-icon" style="background:#d97706">A3</div>
+            <div class="step-name">Auditor</div>
+            <div class="step-sub">Policy checks</div>
+          </div>
+        </button>
+        <div class="step-arrow">&rarr;</div>
+        <button class="step-btn" data-step="3" onclick="selectStep(3)">
+          <div class="step-inner">
+            <div class="step-icon" style="background:#2c2c2a">&#10003;</div>
+            <div class="step-name">Verdict</div>
+            <div class="step-sub">Audit trail</div>
+          </div>
+        </button>
+      </div>
+      <div class="step-detail" id="step-detail"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">Stack</div>
+    <h2>Technology choices</h2>
+    <div class="stack-row"><span class="stack-layer">Orchestration</span><span class="stack-choice">LangGraph StateGraph &nbsp;<span class="stack-note">sequential agent graph with typed shared state</span></span></div>
+    <div class="stack-row"><span class="stack-layer">LLM provider</span><span class="stack-choice">OpenAI API &nbsp;<span class="stack-note">gpt-4o for investigator, gpt-4o-mini for triage and audit</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Vector store</span><span class="stack-choice">ChromaDB &nbsp;<span class="stack-note">local persistent, MMR retrieval</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Transaction DB</span><span class="stack-choice">SQLite + IEEE-CIS &nbsp;<span class="stack-note">25 hand-crafted demo disputes, eval set kept strictly separate</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Backend</span><span class="stack-choice">FastAPI + SSE &nbsp;<span class="stack-note">one event streamed per agent step</span></span></div>
+    <div class="stack-row"><span class="stack-layer">Frontend</span><span class="stack-choice">Vanilla HTML/CSS/JS &nbsp;<span class="stack-note">no framework, no build step</span></span></div>
+  </section>
+
+  <section>
+    <div class="section-label">RAG Evaluation</div>
+    <h2>Getting the Visa rulebook retrieval right</h2>
+    <p>The Investigator retrieves the specific Visa Core Rules clause that applies to each dispute's reason code and surfaces it verbatim with section number, page, and relevance score. Getting there required four iterations on chunking strategy, evaluated against a golden set of 28 queries drawn directly from the rulebook.</p>
+    <p>The core problem with flat chunking: section headings were being split away from their content. A chunk about the 120-day filing limit had no indication it belonged to §11.7.5.4. The fix was prefixing every chunk with its full ancestor breadcrumb:</p>
+    <p><code style="display:block;padding:10px 14px;line-height:1.6">[§11 Dispute Resolution &gt; §11.7 Dispute Category 10 &gt; §11.7.5 Dispute Condition 10.4 &gt; §11.7.5.4 Dispute Time Limit]</code></p>
+    <p>This gave embeddings enough structural signal to rank by section, not just keyword similarity.</p>
+
+    <div id="rag-chart" style="margin:20px 0;display:flex;flex-direction:column;gap:10px"></div>
+    <p style="font-size:13px;color:#888780;margin-top:8px">Hit@3 = fraction of 28 test queries where the correct Visa clause appeared in top-3 results. MRR = mean reciprocal rank of first correct result.</p>
+    <p>Three queries remain unsolved. They share a pattern: query terms that semantically match a parallel section (for example, "account" in a query pulls §12.4 "Incorrect Account Number" ahead of the intended §11.7.5.3). The fix is prompt-level: anchoring investigator queries with the reason code number before any natural-language terms.</p>
+  </section>
+
+  <section>
+    <div class="section-label">Interpretable Classifier</div>
+    <h2>Why a Decision Tree over XGBoost</h2>
+    <p>The Investigator runs a Decision Tree as one of its five tools. The choice was deliberate: a Decision Tree produces an extractable decision path that renders directly in the UI and audit trail. Every prediction comes with a human-readable trace like:</p>
+    <p><code style="display:block;padding:10px 14px;line-height:1.8">velocity_24h &le; 2.5 (actual: 0)<br>merchant_risk_score &gt; 0.31 (actual: 0.61)<br>geo_mismatch &gt; 0.5 (actual: 1)<br>&rarr; FRAUD, 98.6% confidence</code></p>
+    <p>This mirrors how compliance teams document model-assisted decisions for regulators: not as a score, but as a step-by-step path a reviewer can follow. Inference is under 1ms, so it adds zero latency to the agent loop. The model was trained on 5,000 rows of synthetic data calibrated to IEEE-CIS distributions.</p>
+
+    <table class="data-table">
+      <thead><tr><th>Metric</th><th>In-sample</th><th>CV 5-fold mean</th><th>CV std</th></tr></thead>
+      <tbody>
+        <tr><td>F1</td><td class="num">0.8683</td><td class="num hl">0.8531</td><td class="num muted">&plusmn;0.0225</td></tr>
+        <tr><td>Precision</td><td class="num">0.8002</td><td class="num muted">—</td><td class="num muted">—</td></tr>
+        <tr><td>Recall</td><td class="num">0.9490</td><td class="num muted">—</td><td class="num muted">—</td></tr>
+        <tr><td>ROC-AUC</td><td class="num">0.9850</td><td class="num hl">0.9655</td><td class="num muted">&plusmn;0.0094</td></tr>
+        <tr><td>Rows</td><td class="num">5,000</td><td class="num muted">—</td><td class="num muted">—</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:24px">Feature importances</h3>
+    <p>Velocity dominates at 0.63, consistent with the IEEE-CIS dataset: fraud cards average 3.2 transactions per 24 hours versus roughly 1 for legitimate cards.</p>
+    <div class="feat-bars" id="feat-bars"></div>
+  </section>
+
+  <section>
+    <div class="section-label">Governance</div>
+    <h2>Full audit trail and replay</h2>
+    <p>Every pipeline run writes a complete <code>AuditRecord</code> to both an append-only <code>audit_log.jsonl</code> and a queryable <code>audit_runs</code> SQLite table. A separate <code>audit.html</code> replay dashboard lets any reviewer pull up a past run by <code>run_id</code> and step through exactly what every agent saw and decided without re-running the pipeline.</p>
+    <p>This mirrors Model Risk Management requirements in financial institutions: every model-assisted decision must be auditable and replayable by a reviewer who was not present at decision time.</p>
+
+    <div class="audit-card">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888780;margin-bottom:12px">Sample audit record fields (abridged)</div>
+      <div class="audit-row"><span class="audit-key">inv_dt_decision_path</span><span class="audit-val">["velocity_24h &le; 2.5", "merchant_risk &gt; 0.31", ...]</span></div>
+      <div class="audit-row"><span class="audit-key">inv_rag_query</span><span class="audit-val">"dispute condition 10.4 card absent 120 days"</span></div>
+      <div class="audit-row"><span class="audit-key">inv_rag_chunks[0].section</span><span class="audit-val">Dispute Condition 10.4 &nbsp; page 731</span></div>
+      <div class="audit-row"><span class="audit-key">aud_rules_checked</span><span class="audit-val">6 rules &nbsp;<span class="pass-tag">5 pass</span> <span class="fail-tag">1 fail</span></span></div>
+      <div class="audit-row"><span class="audit-key">total_cost_usd</span><span class="audit-val">$0.0246</span></div>
+      <div class="audit-row"><span class="audit-key">pipeline_version</span><span class="audit-val">v1.0.0 &nbsp;&middot;&nbsp; dt_v1</span></div>
+    </div>
+
+    <p>After fixing a missing <code>inv_tool_calls</code> field in <code>write_audit_record()</code>, audit completeness reached 100% across 102 stored runs. Reasoning consistency: 100%.</p>
+  </section>
+
+  <section>
+    <div class="section-label">Evaluation summary</div>
+    <h2>What the numbers say</h2>
+    <div class="eval-grid">
+      <div class="eval-cell">
+        <div class="eval-metric">RAG Hit@3</div>
+        <div class="eval-value">0.893</div>
+        <div class="eval-context">28 test queries against Visa Core Rules</div>
+      </div>
+      <div class="eval-cell">
+        <div class="eval-metric">RAG MRR</div>
+        <div class="eval-value">0.738</div>
+        <div class="eval-context">Up from 0.13 with flat chunking</div>
+      </div>
+      <div class="eval-cell">
+        <div class="eval-metric">Classifier CV F1</div>
+        <div class="eval-value">0.853</div>
+        <div class="eval-context">5-fold cross-validation, &plusmn;0.023</div>
+      </div>
+      <div class="eval-cell">
+        <div class="eval-metric">Violation catch rate</div>
+        <div class="eval-value">100%</div>
+        <div class="eval-context">No policy-violating case approved</div>
+      </div>
+    </div>
+
+    <p>Pipeline verdict accuracy across 25 hand-crafted scenarios is 44%. This deserves a direct comment. The system is conservative by design: the 0.85 confidence floor pushes the Investigator toward escalation on ambiguous cases rather than a wrong approve or reject. The 100% violation catch rate is the metric that matters most for a compliance tool. Over-escalation is a tunable parameter; the specific scenario categories where accuracy is perfect (duplicate disputes, policy violations, reason code mismatches, legitimate charges) align with what a compliance tool needs to get right.</p>
+  </section>
+
+  <section>
+    <div class="section-label">Future work</div>
+    <h2>What I would do next</h2>
+
+    <div class="future-item">
+      <div class="future-num">1</div>
+      <div class="future-text"><strong>Fix the three remaining RAG failures with prompt-level anchoring.</strong> All three share the same root cause: query terms that semantically match parallel rulebook sections. The Investigator system prompt should anchor every query with the reason code number before any natural-language description, which should resolve the ambiguity without changing the chunking or retrieval strategy.</div>
+    </div>
+    <div class="future-item">
+      <div class="future-num">2</div>
+      <div class="future-text"><strong>Add a fairness evaluation slice to the batch eval script.</strong> The current eval measures accuracy and catch rate but not disparate impact. A production system should be stratified by merchant category, transaction geography, and dispute amount range to check whether verdict distributions differ across groups in ways not explained by fraud signal strength. Identifying and documenting those differences is a prerequisite for responsible deployment, and something I would build into the eval framework before considering this production-ready.</div>
+    </div>
+  </section>
+
+</div>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <span class="footer-left">Feroz Khan &nbsp;&middot;&nbsp; Seattle &nbsp;&middot;&nbsp; 2026</span>
+    <a href="https://github.com/YOUR_USERNAME/dispute-agent" target="_blank">View source on GitHub &rarr;</a>
+  </div>
+</footer>
+
+<script>
+const steps = [
+  {
+    color: '#7c3aed', label: 'A1', title: 'Triage & router',
+    model: 'gpt-4o-mini — NER + PII masking, minimize cost',
+    body: `<p>Takes raw customer input and does two things: extracts structured entities (transaction ID, amount, merchant, reason code, urgency classification), then masks any PII before anything moves downstream.</p>
+    <p>The masking is visible in the UI: <code>[NAME]</code>, <code>[LOCATION]</code>, and <code>[CONTACT]</code> replace the original values. Downstream agents never see a real name or phone number.</p>
+    <p>Urgency classification is rule-driven in the prompt: high-value if amount > $1,000, time-sensitive if the statement mentions travel or a recurring charge. This sets the routing context without requiring the Investigator to re-parse the raw text.</p>
+    <div class="signal-row"><span class="signal-pill pill-purple">Entity extraction</span><span class="signal-pill pill-amber">PII masking</span><span class="signal-pill pill-gray">Urgency classification</span></div>`
+  },
+  {
+    color: '#0d9488', label: 'A2', title: 'Investigator',
+    model: 'gpt-4o — multi-tool synthesis + RAG, highest accuracy required',
+    body: `<p>Runs five tools in sequence, then synthesizes all results into a structured recommendation with a confidence score. The tool call log and Decision Tree decision path are both rendered in the UI and stored in the audit trail.</p>
+    <div class="tool-list">
+      <div class="tool-row"><span class="tool-tag">query_transactions()</span><span class="tool-desc">Full transaction record from SQLite</span></div>
+      <div class="tool-row"><span class="tool-tag">get_velocity_history()</span><span class="tool-desc">Card activity over past 24 hours</span></div>
+      <div class="tool-row"><span class="tool-tag">check_merchant_risk()</span><span class="tool-desc">Merchant risk score and category</span></div>
+      <div class="tool-row"><span class="tool-tag">run_fraud_classifier()</span><span class="tool-desc">Decision Tree — fraud probability + decision path</span></div>
+      <div class="tool-row"><span class="tool-tag">search_compliance_docs_RAG()</span><span class="tool-desc">Applicable Visa rule clause, section, page</span></div>
+    </div>
+    <p>Confidence > 0.85 required to approve or reject. Otherwise the recommendation is escalate. This is deliberate: it produces over-escalation on ambiguous cases rather than a wrong decision.</p>`
+  },
+  {
+    color: '#d97706', label: 'A3', title: 'Auditor (independent)',
+    model: 'gpt-4o-mini — deterministic rule checks, no creativity required',
+    body: `<p>Structurally isolated from the Investigator's reasoning. It receives only the structured output — recommendation and confidence score — not the tool call history, RAG text, or fraud signals. This enforces independent adjudication, analogous to a four-eyes principle in financial compliance.</p>
+    <p>Six deterministic policy checks run before the verdict:</p>
+    <div class="audit-card" style="margin:10px 0">
+      <div class="audit-row"><span class="audit-key">Transaction exists in database</span><span class="pass-tag">checked in Python</span></div>
+      <div class="audit-row"><span class="audit-key">Filing within 120-day Visa window</span><span class="pass-tag">checked in Python</span></div>
+      <div class="audit-row"><span class="audit-key">Refund amount &le; $5,000 limit</span><span class="pass-tag">checked in Python</span></div>
+      <div class="audit-row"><span class="audit-key">Reason code matches dispute type</span><span class="pass-tag">checked by LLM</span></div>
+      <div class="audit-row"><span class="audit-key">No prior settlement on record</span><span class="pass-tag">checked by LLM</span></div>
+      <div class="audit-row"><span class="audit-key">Investigator confidence &ge; 0.85</span><span class="pass-tag">checked in Python</span></div>
+    </div>
+    <p>Amount threshold and confidence floor run in Python before the LLM call, saving tokens for the context-dependent checks. If any rule fails, the verdict is <code>policy_violation</code> and the pipeline halts.</p>`
+  },
+  {
+    color: '#2c2c2a', label: '&#10003;', title: 'Verdict and audit trail',
+    model: 'Every run writes a complete AuditRecord — approve / reject / escalate / policy_violation',
+    body: `<p>After the Auditor issues its verdict, a complete <code>AuditRecord</code> is written to both <code>audit_log.jsonl</code> and the <code>audit_runs</code> SQLite table. The record includes the full DT decision path, all RAG chunks with relevance scores, all tool call results, LLM reasoning trace, and all six policy check outcomes.</p>
+    <p>A separate <code>audit.html</code> replay dashboard lets any reviewer pull up a past run by <code>run_id</code> and step through exactly what every agent saw and decided, without re-running the pipeline.</p>
+    <div class="signal-row"><span class="signal-pill pill-teal">Approve</span><span class="signal-pill pill-red">Reject</span><span class="signal-pill pill-amber">Policy violation</span><span class="signal-pill pill-gray">Escalate</span></div>
+    <p>Per-run cost: typically $0.02 to $0.03 for a full three-agent run. Total latency: 15 to 22 seconds, dominated by gpt-4o in the Investigator's multi-turn tool loop.</p>`
+  }
+];
+
+function selectStep(i) {
+  document.querySelectorAll('.step-btn').forEach((b, j) => b.classList.toggle('active', j === i));
+  const s = steps[i];
+  document.getElementById('step-detail').innerHTML = `
+    <div class="detail-header">
+      <div class="detail-badge" style="background:${s.color}">${s.label}</div>
+      <div><div class="detail-title">${s.title}</div><div class="detail-model">${s.model}</div></div>
+    </div>
+    <div class="detail-body">${s.body}</div>`;
+}
+selectStep(0);
+
+const ragData = [
+  { label: 'Flat token-size chunks', hit3: 0.25, mrr: 0.13, final: false },
+  { label: 'Section-aware splitting', hit3: 0.65, mrr: 0.46, final: false },
+  { label: '+ section prefix in metadata', hit3: 0.80, mrr: 0.63, final: false },
+  { label: 'Hierarchical breadcrumb chunking', hit3: 0.893, mrr: 0.738, final: true },
+];
+const rc = document.getElementById('rag-chart');
+ragData.forEach((d, i) => {
+  const f = d.final;
+  rc.innerHTML += `
+    <div style="margin-bottom:${f?0:4}px">
+      <div style="font-size:12px;color:${f?'#3C3489':'#5f5e5a'};margin-bottom:6px;font-weight:${f?500:400}">${f?'&#10003; ':''}${d.label}</div>
+      <div class="rag-row" style="margin-bottom:4px">
+        <div style="width:52px;font-size:11px;color:#888780">Hit@3</div>
+        <div class="rag-bar-wrap"><div class="rag-bar" style="width:${d.hit3*100}%;background:${f?'#7F77DD':'#AFA9EC'}"></div></div>
+        <div class="rag-val">${d.hit3}</div>
+      </div>
+      <div class="rag-row">
+        <div style="width:52px;font-size:11px;color:#888780">MRR</div>
+        <div class="rag-bar-wrap"><div class="rag-bar" style="width:${d.mrr*100}%;background:${f?'#0F6E56':'#5DCAA5'}"></div></div>
+        <div class="rag-val">${d.mrr}</div>
+      </div>
+    </div>
+    ${!f?'<div style="height:12px;border-left:1.5px dashed #d3d1c7;margin-left:26px;margin-bottom:4px"></div>':''}`;
+});
+
+const feats = [
+  { name: 'velocity_24h', val: 0.6315 },
+  { name: 'merchant_risk_score', val: 0.2873 },
+  { name: 'velocity_amt_24h', val: 0.0283 },
+  { name: 'unique_locations_24h', val: 0.0276 },
+  { name: 'geo_mismatch', val: 0.0198 },
+  { name: 'transaction_amt', val: 0.0049 },
+];
+const fb = document.getElementById('feat-bars');
+feats.forEach(f => {
+  fb.innerHTML += `<div class="feat-row">
+    <div class="feat-name">${f.name}</div>
+    <div class="feat-bar-wrap"><div class="feat-bar" style="width:${(f.val*100).toFixed(1)}%"></div></div>
+    <div class="feat-val">${f.val.toFixed(4)}</div>
+  </div>`;
+});
+</script>
+</body>
+</html>
