@@ -1,69 +1,57 @@
-# Agentic Fraud Detection System with LangGraph and RAG
+# Agentic Dispute Resolution System with LangGraph and RAG
 
-A three-agent LangGraph pipeline that resolves credit card disputes end-to-end. A raw dispute claim enters Agent 1, which fetches transaction records, masks PII, and extracts structured entities. Agent 2 runs four parallel checks, a Decision Tree fraud classifier on the transaction, velocity and risk signals pulled from disparate data sources, and a RAG retrieval over the Visa Core Rules to surface the exact policy clause governing the claim. Agent 3 applies deterministic compliance checks (example, 120-day dispute window) and issues a final decision, halting the pipeline if a rule is violated.
-
----
-
-## Demo
-
-
-
-https://github.com/user-attachments/assets/7d96d707-19dd-4c84-9444-b5aa513d726e
-
-
-
-
+**[Read the full explainer →](https://ferozk0333.github.io/Agentic-Fraud-Detection-System-with-LangGraph-and-RAG/)**
 
 ---
 
-## How it works
+<img width="800" height="703" alt="demo" src="https://github.com/user-attachments/assets/4629a71f-fdaa-4d38-8cf6-667ffb6e4cdd" />
 
-A dispute flows through three specialized agents orchestrated by LangGraph:
+
+*Input a dispute, watch three agents reason through it in real time.*
+
+---
+
+## What it does
+
+A three-agent pipeline that resolves credit card disputes end-to-end: extracts entities and masks PII, investigates using live tool calls and a RAG-grounded Visa rulebook lookup, then runs deterministic policy checks before issuing a verdict.
+
+## Agents
 
 | Agent | Model | Role |
 |---|---|---|
-| Triage | `gpt-4o-mini` | Extracts entities, masks PII, classifies dispute type |
-| Investigator | `gpt-4o` | Queries transaction DB, runs fraud classifier, retrieves Visa policy via RAG |
-| Auditor | `gpt-4o-mini` | Checks compliance rules, issues final decision (Reject/Allow claim, Escalate to human, Policy Violation) |
-
-
----
-
-## Key features
-
-- **RAG over Visa Core Rules:** ChromaDB retrieval grounded in the real Visa rulebook (April 2026 edition), with source section + page returned alongside each chunk
-- **Decision Tree fraud classifier:** Trained on IEEE-CIS calibrated data, decision path visible in UI
-- **Policy guardrails:** Auditor halts and logs violation type if compliance rules are breached
-- **Full audit trail:** Rvery run writes a structured `AuditRecord` to `audit_log.jsonl` as part of Governance layer
-- **Streaming UI:** SSE events push per-agent latency, token usage, and cost to the frontend in real time
-
----
+| Triage | gpt-4o-mini | NER, PII masking, urgency classification |
+| Investigator | gpt-4o | 5-tool loop, fraud classifier, Visa RAG retrieval |
+| Auditor | gpt-4o-mini | 6 deterministic policy checks, independent of Agent 2's reasoning |
 
 ## Stack
 
-`LangGraph` · `FastAPI` · `ChromaDB` · `SQLite` · `OpenAI API` · `scikit-learn` · `Vanilla JS`
+LangGraph + LangChain · OpenAI API · ChromaDB · SQL · FastAPI
 
----
+## Key design decisions
 
-## Setup
+- **Interpretable classifier** — Decision Tree over XGBoost so every prediction exposes a human-readable decision path, not just a score
+- **Hierarchical RAG chunking** — chunks prefixed with ancestor breadcrumbs to retrieve specific Visa rule clauses; Hit@3 improved from 0.25 to 0.893
+- **Agent isolation** — Auditor receives only Agent 2's structured output, never its reasoning trace, enforcing independent adjudication
+- **Deterministic guardrails** — 4 of 6 policy checks run in Python before any LLM call; confidence floor of 0.85 required to approve or reject
+
+## Eval
+
+| Metric | Value |
+|---|---|
+| RAG Hit@3 | 0.893 |
+| RAG MRR | 0.738 |
+| Classifier CV F1 | 0.853 ± 0.023 |
+| Classifier ROC-AUC | 0.966 ± 0.009 |
+| Audit completeness | 100% |
+
+## Quickstart
 
 ```bash
 pip install -r requirements.txt
-
-python backend/data/seed_demo_data.py      # seed 25 demo disputes
-python backend/data/ingest_ieee.py         # load IEEE-CIS transactions (eval only)
-python backend/data/ingest_visa_rules.py   # embed Visa rulebook into ChromaDB
-
+python backend/data/seed_demo_data.py
+python backend/data/ingest_visa_rules.py
 uvicorn backend.main:app --reload
 open frontend/index.html
 ```
 
----
-
-## Evaluation
-
-| Component | Metric | Value |
-|---|---|---|
-| Fraud classifier | F1 | 0.055 *(baseline — retraining in progress)* |
-| RAG retrieval | Hit@3 | 0.25 |
-| RAG retrieval | MRR | 0.133 |
+Set `OPENAI_API_KEY` and `CHROMA_PERSIST_DIR` in a `.env` file before running.
