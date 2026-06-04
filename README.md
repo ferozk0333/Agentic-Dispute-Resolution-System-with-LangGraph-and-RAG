@@ -2,7 +2,7 @@
 
 A three-agent pipeline that resolves credit card disputes end-to-end: extracts entities and masks PII, investigates using live tool calls and a RAG-grounded Visa rulebook lookup, then runs deterministic policy checks before issuing a verdict.
 
-**[Read the full explainer →](https://ferozk0333.github.io/Agentic-Fraud-Detection-System-with-LangGraph-and-RAG/)**
+**[Read the full explainer →](https://ferozk0333.github.io/Agentic-Dispute-Resolution-System-with-LangGraph-and-RAG/)**
 
 ---
 
